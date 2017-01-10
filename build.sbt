@@ -8,6 +8,7 @@ sbtPlugin := true
 
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % "1.11.76",
+  "com.amazonaws" % "aws-java-sdk-s3" % "1.11.76",
   "com.github.pathikrit" %% "better-files" % "2.14.0",
   "com.github.eirslett" %% "sbt-slf4j" % "0.1",
   "com.typesafe.play" %% "play-json" % "2.4.8",
