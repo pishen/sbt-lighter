@@ -38,6 +38,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkMasterInstanceType = settingKey[String]("spark master's instance type")
     val sparkSlaveInstanceType = settingKey[String]("spark slave's instance type")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
+    val sparkAdditionalSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for the ec2")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     //commands
     val sparkCreateCluster = inputKey[Unit]("create cluster")
@@ -61,6 +62,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkMasterInstanceType := "m3.xlarge",
     sparkSlaveInstanceType := "m3.xlarge",
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkAdditionalSecurityGroupIds := None,
 
     sparkCreateCluster := {
       val log = streams.value.log
@@ -83,6 +85,11 @@ object EmrSparkPlugin extends AutoPlugin {
           .withInstances(
             Some(new JobFlowInstancesConfig())
               .map(c => sparkSubnetId.value.map(id => c.withEc2SubnetId(id)).getOrElse(c))
+              .map { c =>
+                sparkAdditionalSecurityGroupIds.value.map { ids =>
+                  c.withAdditionalMasterSecurityGroups(ids: _*).withAdditionalSlaveSecurityGroups(ids: _*)
+                }.getOrElse(c)
+              }
               .get
               .withKeepJobFlowAliveWhenNoSteps(true)
               .withInstanceCount(sparkInstanceCount.value)
