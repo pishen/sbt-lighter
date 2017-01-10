@@ -41,7 +41,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkAdditionalSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for the ec2")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     //commands
-    val sparkCreateCluster = inputKey[Unit]("create cluster")
+    val sparkCreateCluster = taskKey[Unit]("create cluster")
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
   }
@@ -106,13 +106,14 @@ object EmrSparkPlugin extends AutoPlugin {
       val args = spaceDelimited("<arg>").parsed
 
       //validation
-      assert(sparkS3JarFolder.value.startsWith("s3://"), "sparkS3JarLocation should starts with \"s3://\"")
+      //TODO: avoid throwing exceptions here
+      assert(sparkS3JarFolder.value.startsWith("s3://"), "sparkS3JarLocation should starts with \"s3://\".")
       val pathWithoutPrefix = sparkS3JarFolder.value.drop(5)
 
       val bucket = pathWithoutPrefix.split("/").head
-      assert(bucket != "", "The bucket name in sparkS3JarLocation is empty")
+      assert(bucket != "", "The bucket name in sparkS3JarLocation is empty.")
 
-      assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\"")
+      assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\".")
 
       val mainClassValue = (mainClass in Compile).value.getOrElse(sys.error("Can't locate the main class in your application."))
 
