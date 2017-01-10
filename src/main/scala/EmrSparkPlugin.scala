@@ -152,6 +152,26 @@ object EmrSparkPlugin extends AutoPlugin {
           )
       )
       log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
+    },
+
+    sparkTerminateCluster := {
+      val log = streams.value.log
+
+      val emr = new AmazonElasticMapReduceClient()
+        .withRegion[AmazonElasticMapReduceClient](Regions.fromName(sparkAwsRegion.value))
+      val clusterIdOpt = emr
+        .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+        .getClusters().asScala
+        .find(_.getName == sparkClusterName.value)
+        .map(_.getId)
+
+      clusterIdOpt match {
+        case None =>
+          log.info(s"The cluster with name ${sparkClusterName.value} does not exist.")
+        case Some(clusterId) =>
+          emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(clusterId))
+          log.info(s"Cluster with id $clusterId is terminating, please check aws console for the following information.")
+      }
     }
   )
 }
