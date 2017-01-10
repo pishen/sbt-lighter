@@ -1,6 +1,6 @@
 # sbt-emr-spark
 
-Run your [Spark EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-launch.html) by sbt.
+Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-launch.html) by sbt
 
 ## Getting started
 
