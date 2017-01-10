@@ -9,7 +9,7 @@ Run your [Spark EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spar
    ```
    resolvers += Resolver.bintrayRepo("pishen", "sbt-plugins")
 
-   addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.1.0-SNAPSHOT")
+   addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.1.0")
    ```
 
 2. Prepare your `build.sbt`
