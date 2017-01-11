@@ -47,7 +47,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
    import org.apache.spark._
 
    object Main {
-     def main(args: Array[String]) {
+     def main(args: Array[String]): Unit = {
        //setup spark
        val sc = new SparkContext(new SparkConf())
        //your algorithm
