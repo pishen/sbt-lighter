@@ -40,6 +40,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
     val sparkAdditionalSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for the ec2")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
+    val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
@@ -63,6 +64,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkSlaveInstanceType := "m3.xlarge",
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkAdditionalSecurityGroupIds := None,
+    sparkS3LoggingFolder := None,
 
     sparkCreateCluster := {
       val log = streams.value.log
@@ -76,7 +78,9 @@ object EmrSparkPlugin extends AutoPlugin {
       if (clustersNames.exists(_ == sparkClusterName.value)) {
         log.error(s"A cluster with name ${sparkClusterName.value} already exists.")
       } else {
-        val request = new RunJobFlowRequest()
+        val request = Some(new RunJobFlowRequest())
+          .map(r => sparkS3LoggingFolder.value.map(folder => r.withLogUri(folder)).getOrElse(r))
+          .get
           .withName(sparkClusterName.value)
           .withApplications(new Application().withName("Spark"))
           .withReleaseLabel(sparkEmrRelease.value)
