@@ -20,7 +20,10 @@ import com.amazonaws.regions.Regions
 import com.amazonaws.services.elasticmapreduce.AmazonElasticMapReduceClient
 import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
 import com.amazonaws.services.s3.AmazonS3Client
+import sbinary.DefaultProtocol.StringFormat
 import sbt._
+import sbt.Cache.seqFormat
+import sbt.Defaults.runMainParser
 import sbt.Keys._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
@@ -45,6 +48,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkCreateCluster = taskKey[Unit]("create cluster")
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
+    val sparkSubmitJobWithMain = inputKey[Unit]("submit the job with specified main class")
   }
   import autoImport._
 
@@ -54,7 +58,6 @@ object EmrSparkPlugin extends AutoPlugin {
   val activatedClusterStates = Seq(ClusterState.RUNNING, ClusterState.STARTING, ClusterState.WAITING, ClusterState.BOOTSTRAPPING)
 
   override lazy val projectSettings = Seq(
-    //TODO
     sparkClusterName := name.value,
     sparkEmrRelease := "emr-5.2.1",
     sparkEmrServiceRole := "EMR_DefaultRole",
@@ -106,56 +109,19 @@ object EmrSparkPlugin extends AutoPlugin {
     },
 
     sparkSubmitJob := {
-      val log = streams.value.log
+      implicit val log = streams.value.log
       val args = spaceDelimited("<arg>").parsed
-
-      //validation
-      //TODO: avoid throwing exceptions here
-      assert(sparkS3JarFolder.value.startsWith("s3://"), "sparkS3JarLocation should starts with \"s3://\".")
-      val pathWithoutPrefix = sparkS3JarFolder.value.drop(5)
-
-      val bucket = pathWithoutPrefix.split("/").head
-      assert(bucket != "", "The bucket name in sparkS3JarLocation is empty.")
-
-      assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\".")
-
       val mainClassValue = (mainClass in Compile).value.getOrElse(sys.error("Can't locate the main class in your application."))
+      submitJob(mainClassValue, args, sparkS3JarFolder.value, sparkAwsRegion.value, sparkClusterName.value, assembly.value)
+    },
 
-      val emr = new AmazonElasticMapReduceClient()
-        .withRegion[AmazonElasticMapReduceClient](Regions.fromName(sparkAwsRegion.value))
-      val clusterId = emr
-        .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
-        .getClusters().asScala
-        .find(_.getName == sparkClusterName.value)
-        .map(_.getId)
-        .getOrElse(sys.error(s"The cluster with name ${sparkClusterName.value} does not exist, you may use sparkCreateCluster to create one first."))
-
-      //put jar to s3
-      val s3 = new AmazonS3Client()
-      val jar = assembly.value
-      val key = (pathWithoutPrefix.split("/").tail :+ jar.getName).mkString("/")
-
-      s3.putObject(bucket, key, jar)
-      log.info("Jar uploaded.")
-
-      val s3JarLocation = "s3://" + bucket + "/" + key
-
-      //submit job
-      val res = emr.addJobFlowSteps(
-        new AddJobFlowStepsRequest()
-          .withJobFlowId(clusterId)
-          .withSteps(
-            new StepConfig()
-              .withActionOnFailure(ActionOnFailure.CONTINUE)
-              .withName("Spark Step")
-              .withHadoopJarStep(
-                new HadoopJarStepConfig()
-                  .withJar("command-runner.jar")
-                  .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClassValue, s3JarLocation) ++ args).asJava)
-              )
-          )
-      )
-      log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
+    sparkSubmitJobWithMain <<= {
+      val parser = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil))
+      Def.inputTask {
+        implicit val log = streams.value.log
+        val (mainClass, args) = parser.parsed
+        submitJob(mainClass, args, sparkS3JarFolder.value, sparkAwsRegion.value, sparkClusterName.value, assembly.value)
+      }
     },
 
     sparkTerminateCluster := {
@@ -178,4 +144,58 @@ object EmrSparkPlugin extends AutoPlugin {
       }
     }
   )
+
+  def submitJob(
+    mainClass: String,
+    args: Seq[String],
+    s3JarFolder: String,
+    awsRegion: String,
+    clusterName: String,
+    jar: File
+  )(implicit log: Logger) = {
+    //validation
+    //TODO: avoid throwing exceptions here
+    assert(s3JarFolder.startsWith("s3://"), "sparkS3JarLocation should starts with \"s3://\".")
+    val pathWithoutPrefix = s3JarFolder.drop(5)
+
+    val bucket = pathWithoutPrefix.split("/").head
+    assert(bucket != "", "The bucket name in sparkS3JarLocation is empty.")
+
+    assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\".")
+
+    val emr = new AmazonElasticMapReduceClient()
+      .withRegion[AmazonElasticMapReduceClient](Regions.fromName(awsRegion))
+    val clusterId = emr
+      .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+      .getClusters().asScala
+      .find(_.getName == clusterName)
+      .map(_.getId)
+      .getOrElse(sys.error(s"The cluster with name ${clusterName} does not exist, you may use sparkCreateCluster to create one first."))
+
+    //put jar to s3
+    val s3 = new AmazonS3Client()
+    val key = (pathWithoutPrefix.split("/").tail :+ jar.getName).mkString("/")
+
+    s3.putObject(bucket, key, jar)
+    log.info("Jar uploaded.")
+
+    val s3JarLocation = "s3://" + bucket + "/" + key
+
+    //submit job
+    val res = emr.addJobFlowSteps(
+      new AddJobFlowStepsRequest()
+        .withJobFlowId(clusterId)
+        .withSteps(
+          new StepConfig()
+            .withActionOnFailure(ActionOnFailure.CONTINUE)
+            .withName("Spark Step")
+            .withHadoopJarStep(
+              new HadoopJarStepConfig()
+                .withJar("command-runner.jar")
+                .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3JarLocation) ++ args).asJava)
+            )
+        )
+    )
+    log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
+  }
 }
