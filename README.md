@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
    ```
    resolvers += Resolver.bintrayIvyRepo("pishen", "sbt-plugins")
 
-   addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.1.0")
+   addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.2.0")
    ```
    (You may need to upgrade your sbt if you don't have the `bintrayIvyRepo` function.)
 
