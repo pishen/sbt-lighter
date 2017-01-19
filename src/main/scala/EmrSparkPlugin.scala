@@ -115,13 +115,12 @@ object EmrSparkPlugin extends AutoPlugin {
       submitJob(mainClassValue, args, sparkS3JarFolder.value, sparkAwsRegion.value, sparkClusterName.value, assembly.value)
     },
 
-    sparkSubmitJobWithMain <<= {
-      val parser = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil))
+    sparkSubmitJobWithMain := {
       Def.inputTask {
         implicit val log = streams.value.log
-        val (mainClass, args) = parser.parsed
+        val (mainClass, args) = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil)).parsed
         submitJob(mainClass, args, sparkS3JarFolder.value, sparkAwsRegion.value, sparkClusterName.value, assembly.value)
-      }
+      }.evaluated
     },
 
     sparkTerminateCluster := {
