@@ -38,8 +38,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkEmrServiceRole = settingKey[String]("emr's service role")
     val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
     val sparkInstanceCount = settingKey[Int]("total number of instances")
-    val sparkMasterInstanceType = settingKey[String]("spark master's instance type")
-    val sparkSlaveInstanceType = settingKey[String]("spark slave's instance type")
+    val sparkInstanceType = settingKey[String]("spark nodes' instance type")
+    val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
     val sparkAdditionalSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for the ec2")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
@@ -63,8 +63,8 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkSubnetId := None,
     sparkInstanceCount := 1,
-    sparkMasterInstanceType := "m3.xlarge",
-    sparkSlaveInstanceType := "m3.xlarge",
+    sparkInstanceType := "m3.xlarge",
+    sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkAdditionalSecurityGroupIds := None,
     sparkS3LoggingFolder := None,
@@ -98,10 +98,37 @@ object EmrSparkPlugin extends AutoPlugin {
                 }.getOrElse(c)
               }
               .get
+              .withInstanceGroups({
+                val masterConfig = Some(new InstanceGroupConfig())
+                  .map { c =>
+                    sparkInstanceBidPrice.value.map { price =>
+                      c.withMarket("SPOT").withBidPrice(price)
+                    }.getOrElse(c)
+                  }
+                  .get
+                  .withInstanceCount(1)
+                  .withInstanceRole("MASTER")
+                  .withInstanceType(sparkInstanceType.value)
+
+                val slaveCount = sparkInstanceCount.value - 1
+                val slaveConfig = Some(new InstanceGroupConfig())
+                  .map { c =>
+                    sparkInstanceBidPrice.value.map { price =>
+                      c.withMarket("SPOT").withBidPrice(price)
+                    }.getOrElse(c)
+                  }
+                  .get
+                  .withInstanceCount(slaveCount)
+                  .withInstanceRole("CORE")
+                  .withInstanceType(sparkInstanceType.value)
+
+                if (slaveCount <= 0) {
+                  Seq(masterConfig).asJava
+                } else {
+                  Seq(masterConfig, slaveConfig).asJava
+                }
+              })
               .withKeepJobFlowAliveWhenNoSteps(true)
-              .withInstanceCount(sparkInstanceCount.value)
-              .withMasterInstanceType(sparkMasterInstanceType.value)
-              .withSlaveInstanceType(sparkSlaveInstanceType.value)
           )
         val res = emr.runJobFlow(request)
         log.info(s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
