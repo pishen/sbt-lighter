@@ -9,13 +9,13 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   ```
   resolvers += Resolver.bintrayIvyRepo("pishen", "sbt-plugins")
 
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.2.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.3.0")
   ```
    (You may need to upgrade your sbt if you don't have the `bintrayIvyRepo` function.)
 
 2. Prepare your `build.sbt`
 
-  ```
+  ```scala
   name := "sbt-emr-spark-test"
 
   scalaVersion := "2.11.8"
@@ -73,3 +73,33 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   ```
   > sparkSubmitJob arg0 arg1 ...
   ```
+
+## Other available settings
+
+```scala
+//Your cluster's name. Default value is copied from your project's `name` setting.
+sparkClusterName := "your-new-cluster-name"
+
+sparkEmrRelease := "emr-5.2.1"
+
+sparkEmrServiceRole := "EMR_DefaultRole"
+
+//EC2's instance type. Will applied to both master and slave nodes.
+sparkInstanceType := "m3.xlarge"
+
+//Bid price for your spot instance.
+//The default value is None, which means all the instance will be on demand.
+sparkInstanceBidPrice := Some("0.38")
+
+sparkInstanceRole := "EMR_EC2_DefaultRole"
+
+sparkS3LoggingFolder := Some("s3://aws-logs-xxxxxxxxxxxx-ap-northeast-1/elasticmapreduce/")
+```
+
+## Other available commands
+
+```
+> sparkTerminateCluster
+
+> sparkSubmitJobWithMain mypackage.Main arg0 arg1 ...
+```
