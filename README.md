@@ -80,7 +80,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 //Your cluster's name. Default value is copied from your project's `name` setting.
 sparkClusterName := "your-new-cluster-name"
 
-sparkEmrRelease := "emr-5.2.1"
+sparkEmrRelease := "emr-5.4.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
 

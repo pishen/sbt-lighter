@@ -60,7 +60,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
   override lazy val projectSettings = Seq(
     sparkClusterName := name.value,
-    sparkEmrRelease := "emr-5.2.1",
+    sparkEmrRelease := "emr-5.4.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkSubnetId := None,
     sparkInstanceCount := 1,
