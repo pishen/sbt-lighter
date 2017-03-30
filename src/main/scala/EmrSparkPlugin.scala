@@ -46,6 +46,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
+    val sparkListClusters = taskKey[Unit]("list existing active clusters")
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain = inputKey[Unit]("submit the job with specified main class")
@@ -168,6 +169,23 @@ object EmrSparkPlugin extends AutoPlugin {
           emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(clusterId))
           log.info(s"Cluster with id $clusterId is terminating, please check aws console for the following information.")
       }
+    },
+
+
+    sparkListClusters := {
+      val log = streams.value.log
+
+      val emr = new AmazonElasticMapReduceClient()
+        .withRegion[AmazonElasticMapReduceClient](Regions.fromName(sparkAwsRegion.value))
+      val clusters = emr
+        .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+        .getClusters().asScala
+
+      log.info(s"${clusters.length} active clusters found: ")
+      clusters.foreach { c =>
+        log.info(s"Name: ${c.getName} | Id: ${c.getId}")
+      }
+
     }
   )
 
