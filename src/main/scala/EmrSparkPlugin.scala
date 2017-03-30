@@ -171,7 +171,6 @@ object EmrSparkPlugin extends AutoPlugin {
       }
     },
 
-
     sparkListClusters := {
       val log = streams.value.log
 
@@ -181,11 +180,14 @@ object EmrSparkPlugin extends AutoPlugin {
         .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
         .getClusters().asScala
 
-      log.info(s"${clusters.length} active clusters found: ")
-      clusters.foreach { c =>
-        log.info(s"Name: ${c.getName} | Id: ${c.getId}")
+      if (clusters.isEmpty) {
+        log.info("No active cluster found.")
+      } else {
+        log.info(s"${clusters.length} active clusters found: ")
+        clusters.foreach { c =>
+          log.info(s"Name: ${c.getName} | Id: ${c.getId}")
+        }
       }
-
     }
   )
 
