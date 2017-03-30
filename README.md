@@ -7,9 +7,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  resolvers += Resolver.bintrayIvyRepo("pishen", "sbt-plugins")
-
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.3.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.4.0")
   ```
    (You may need to upgrade your sbt if you don't have the `bintrayIvyRepo` function.)
 
@@ -99,6 +97,8 @@ sparkS3LoggingFolder := Some("s3://aws-logs-xxxxxxxxxxxx-ap-northeast-1/elasticm
 ## Other available commands
 
 ```
+> sparkListClusters
+
 > sparkTerminateCluster
 
 > sparkSubmitJobWithMain mypackage.Main arg0 arg1 ...
