@@ -7,7 +7,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.4.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.5.0")
   ```
 
 2. Prepare your `build.sbt`
@@ -18,7 +18,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   scalaVersion := "2.11.8"
 
   libraryDependencies ++= Seq(
-    "org.apache.spark" %% "spark-core" % "2.0.2" % "provided"
+    "org.apache.spark" %% "spark-core" % "2.1.0" % "provided"
   )
 
   sparkAwsRegion := "ap-northeast-1"
@@ -59,17 +59,17 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   }
   ```
 
-4. Enter sbt and create your cluster
-
-  ```
-  > sparkCreateCluster
-  ```
-
-5. Submit your Spark application
+4. Submit your Spark application
 
   ```
   > sparkSubmitJob arg0 arg1 ...
   ```
+
+> Note that a cluster with the same name as your project's `name` will be created by default if not exist. And this cluster will terminate itself automatically if there's no further jobs (steps) waiting in the queue.
+> If you want a keep-alive cluster, execute the following command before you submit your first job:
+> ```
+> > sparkCreateCluster
+> ```
 
 ## Other available settings
 
