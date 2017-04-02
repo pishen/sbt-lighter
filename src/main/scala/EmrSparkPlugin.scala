@@ -243,6 +243,7 @@ object EmrSparkPlugin extends AutoPlugin {
     assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\".")
 
     //put jar to s3
+    log.info("Uploading the jar.")
     val s3 = new AmazonS3Client()
     val key = (pathWithoutPrefix.split("/").tail :+ jar.getName).mkString("/")
 
