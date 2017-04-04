@@ -46,7 +46,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     val sparkClusterConfigurationS3Location = settingKey[Option[String]]("S3 location for the EMR cluster configuration")
-    val sparkClusterAdditionalApplications = settingKey[Seq[String]]("Applications other than spark to be deployed on the EMR cluster")
+    val sparkClusterAdditionalApplications = settingKey[Seq[String]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
     val sparkSettings = settingKey[Settings]("wrapper object for above settings")
 
     //commands
@@ -194,7 +194,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
       stepConfig.foreach(s => request.withSteps(s))
 
-      val applications = ("Spark" +: settings.clusterAdditionalApplications).map(new Application().withName)
+      val applications = ("Spark" +: settings.clusterAdditionalApplications).map(name => new Application().withName(name))
 
       request.withName(settings.clusterName)
         .withApplications(applications.asJava)
