@@ -41,6 +41,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
+    val sparkEmrManagedSecurityGroupIdMaster = settingKey[Option[String]]("EMR managed security group ids for the master ec2 instance")
+    val sparkEmrManagedSecurityGroupIdSlave = settingKey[Option[String]]("EMR security group ids for the slave ec2 instances")
     val sparkAdditionalSecurityGroupIdsMaster = settingKey[Seq[String]]("additional security group ids for the master ec2 instance")
     val sparkAdditionalSecurityGroupIdsSlave = settingKey[Seq[String]]("additional security group ids for the slave ec2 instances")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
@@ -73,6 +75,8 @@ object EmrSparkPlugin extends AutoPlugin {
     instanceType: String,
     instanceBidPrice: Option[String],
     instanceRole: String,
+    emrManagedSecurityGroupIdMaster: Option[String],
+    emrManagedSecurityGroupIdSlave: Option[String],
     additionalSecurityGroupIdsMaster: Seq[String],
     additionalSecurityGroupIdsSlave: Seq[String],
     s3JarFolder: String,
@@ -90,6 +94,8 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkEmrManagedSecurityGroupIdMaster := None,
+    sparkEmrManagedSecurityGroupIdSlave := None,
     sparkAdditionalSecurityGroupIdsMaster := Nil,
     sparkAdditionalSecurityGroupIdsSlave := Nil,
     sparkS3LoggingFolder := None,
@@ -106,6 +112,8 @@ object EmrSparkPlugin extends AutoPlugin {
       sparkInstanceType.value,
       sparkInstanceBidPrice.value,
       sparkInstanceRole.value,
+      sparkEmrManagedSecurityGroupIdMaster.value,
+      sparkEmrManagedSecurityGroupIdSlave.value,
       sparkAdditionalSecurityGroupIdsMaster.value,
       sparkAdditionalSecurityGroupIdsSlave.value,
       sparkS3JarFolder.value,
@@ -210,6 +218,14 @@ object EmrSparkPlugin extends AutoPlugin {
 
           if(settings.additionalSecurityGroupIdsSlave.nonEmpty)
             jobFlowConfig.setAdditionalSlaveSecurityGroups(settings.additionalSecurityGroupIdsSlave.asJava)
+
+          settings.emrManagedSecurityGroupIdMaster.foreach(
+            jobFlowConfig.setEmrManagedMasterSecurityGroup
+          )
+
+          settings.emrManagedSecurityGroupIdSlave.foreach(
+            jobFlowConfig.setEmrManagedSlaveSecurityGroup
+          )
 
           def newInstanceGroup(): InstanceGroupConfig = {
             val group =  new InstanceGroupConfig()
