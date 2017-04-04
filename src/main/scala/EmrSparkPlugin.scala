@@ -16,10 +16,10 @@ package sbtemrspark
 
 import scala.collection.JavaConverters._
 
-import com.amazonaws.regions.Regions
-import com.amazonaws.services.elasticmapreduce.AmazonElasticMapReduceClient
+import scala.collection.JavaConverters._
+import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
 import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
-import com.amazonaws.services.s3.AmazonS3Client
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import sbinary.DefaultProtocol.StringFormat
 import sbt._
 import sbt.Cache.seqFormat
@@ -124,8 +124,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkTerminateCluster := {
       val log = streams.value.log
 
-      val emr = new AmazonElasticMapReduceClient()
-        .withRegion[AmazonElasticMapReduceClient](Regions.fromName(sparkAwsRegion.value))
+      val emr = buildEmr(sparkSettings.value)
       val clusterIdOpt = emr
         .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
         .getClusters().asScala
@@ -144,8 +143,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkListClusters := {
       val log = streams.value.log
 
-      val emr = new AmazonElasticMapReduceClient()
-        .withRegion[AmazonElasticMapReduceClient](Regions.fromName(sparkAwsRegion.value))
+      val emr = buildEmr(sparkSettings.value)
       val clusters = emr
         .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
         .getClusters().asScala
@@ -162,8 +160,7 @@ object EmrSparkPlugin extends AutoPlugin {
   )
 
   def createCluster(settings: Settings, stepConfig: Option[StepConfig])(implicit log: Logger) = {
-    val emr = new AmazonElasticMapReduceClient()
-      .withRegion[AmazonElasticMapReduceClient](Regions.fromName(settings.awsRegion))
+    val emr = buildEmr(settings)
     val clustersNames = emr
       .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
       .getClusters().asScala
@@ -244,7 +241,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
     //put jar to s3
     log.info("Uploading the jar.")
-    val s3 = new AmazonS3Client()
+    val s3 = AmazonS3ClientBuilder.defaultClient()
     val key = (pathWithoutPrefix.split("/").tail :+ jar.getName).mkString("/")
 
     s3.putObject(bucket, key, jar)
@@ -253,8 +250,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val s3JarLocation = "s3://" + bucket + "/" + key
 
     //find the cluster
-    val emr = new AmazonElasticMapReduceClient()
-      .withRegion[AmazonElasticMapReduceClient](Regions.fromName(settings.awsRegion))
+    val emr = buildEmr(settings)
+
     val clusterIdOpt = emr
       .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
       .getClusters().asScala
@@ -281,5 +278,11 @@ object EmrSparkPlugin extends AutoPlugin {
       case None =>
         createCluster(settings, Some(stepConfig))
     }
+  }
+
+  def buildEmr(settings: Settings): AmazonElasticMapReduce = {
+    val builder = AmazonElasticMapReduceClientBuilder.standard()
+    builder.setRegion(settings.awsRegion)
+    builder.build()
   }
 }
