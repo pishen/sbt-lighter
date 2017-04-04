@@ -41,8 +41,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
-    val sparkAdditionalSecurityGroupIdsMaster = settingKey[Option[Seq[String]]]("additional security group ids for the master ec2 instance")
-    val sparkAdditionalSecurityGroupIdsSlave = settingKey[Option[Seq[String]]]("additional security group ids for the slave ec2 instances")
+    val sparkAdditionalSecurityGroupIdsMaster = settingKey[Seq[String]]("additional security group ids for the master ec2 instance")
+    val sparkAdditionalSecurityGroupIdsSlave = settingKey[Seq[String]]("additional security group ids for the slave ec2 instances")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     val sparkClusterConfigurationS3Location = settingKey[Option[String]]("S3 location for the EMR cluster configuration")
@@ -73,8 +73,8 @@ object EmrSparkPlugin extends AutoPlugin {
     instanceType: String,
     instanceBidPrice: Option[String],
     instanceRole: String,
-    additionalSecurityGroupIdsMaster: Option[Seq[String]],
-    additionalSecurityGroupIdsSlave: Option[Seq[String]],
+    additionalSecurityGroupIdsMaster: Seq[String],
+    additionalSecurityGroupIdsSlave: Seq[String],
     s3JarFolder: String,
     s3LoggingFolder: Option[String],
     clusterConfigurationS3Location: Option[String],
@@ -90,8 +90,8 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
-    sparkAdditionalSecurityGroupIdsMaster := None,
-    sparkAdditionalSecurityGroupIdsSlave := None,
+    sparkAdditionalSecurityGroupIdsMaster := Nil,
+    sparkAdditionalSecurityGroupIdsSlave := Nil,
     sparkS3LoggingFolder := None,
     sparkClusterConfigurationS3Location := None,
     sparkClusterAdditionalApplications := Nil,
@@ -204,14 +204,12 @@ object EmrSparkPlugin extends AutoPlugin {
         .withInstances {
           val jobFlowConfig = new JobFlowInstancesConfig()
           settings.subnetId.foreach(jobFlowConfig.setEc2SubnetId)
-          settings.subnetId.foreach(jobFlowConfig.setEc2SubnetId)
 
-          settings.additionalSecurityGroupIdsMaster.foreach { asg =>
-            jobFlowConfig.setAdditionalMasterSecurityGroups(asg.asJava)
-          }
-          settings.additionalSecurityGroupIdsSlave.foreach { asg =>
-            jobFlowConfig.setAdditionalSlaveSecurityGroups(asg.asJava)
-          }
+          if(settings.additionalSecurityGroupIdsMaster.nonEmpty)
+            jobFlowConfig.setAdditionalMasterSecurityGroups(settings.additionalSecurityGroupIdsMaster.asJava)
+
+          if(settings.additionalSecurityGroupIdsSlave.nonEmpty)
+            jobFlowConfig.setAdditionalSlaveSecurityGroups(settings.additionalSecurityGroupIdsSlave.asJava)
 
           def newInstanceGroup(): InstanceGroupConfig = {
             val group =  new InstanceGroupConfig()
@@ -220,6 +218,7 @@ object EmrSparkPlugin extends AutoPlugin {
             )(
               group.withMarket(MarketType.SPOT).withBidPrice
             )
+
           }
 
           jobFlowConfig.withInstanceGroups({
