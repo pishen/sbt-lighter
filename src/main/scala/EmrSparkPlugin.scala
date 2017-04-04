@@ -337,13 +337,13 @@ object EmrSparkPlugin extends AutoPlugin {
       _ => sys.error("failed to parse json") ,
       _.map { cs =>
         new EMRConfiguration().
-          withClassification(cs.Classification).
-          withProperties(cs.Properties.asJava)
+          withClassification(cs.classification).
+          withProperties(cs.properties.asJava)
       })
     }
   }
 
-  case class ConfigScala(Classification: String, Properties: Map[String, String])
+  case class ConfigScala(classification: String, properties: Map[String, String])
 
   final case class S3Url(bucket: String, key: Option[String]) {
     override val toString =  s"s3://$bucket/${key.getOrElse("")}"
