@@ -1,5 +1,7 @@
 # sbt-emr-spark
 
+[![Build Status](https://travis-ci.org/pishen/sbt-emr-spark.svg?branch=master)](https://travis-ci.org/pishen/sbt-emr-spark)
+
 Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-launch.html) by sbt
 
 ## Getting started
