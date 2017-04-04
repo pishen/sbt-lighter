@@ -330,7 +330,7 @@ object EmrSparkPlugin extends AutoPlugin {
   case class ConfigScala(Classification: String, Properties: Map[String, String])
 
   final case class S3Url(bucket: String, key: Option[String]) {
-    override val toString =  s"s3://$bucket/$key"
+    override val toString =  s"s3://$bucket/${key.getOrElse("")}"
   }
 
   object S3Url {
