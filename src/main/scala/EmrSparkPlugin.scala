@@ -15,10 +15,10 @@
 package sbtemrspark
 
 import scala.collection.JavaConverters._
-
-import scala.collection.JavaConverters._
+import com.amazonaws.regions.Regions
+import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
-import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
+import com.amazonaws.services.elasticmapreduce.model.{Unit => _, Configuration => EMRConfiguration, _}
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import sbinary.DefaultProtocol.StringFormat
 import sbt._
@@ -41,10 +41,16 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
-    val sparkAdditionalSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for the ec2")
+    val sparkEmrManagedSecurityGroupIdMaster = settingKey[Option[String]]("EMR managed security group ids for the master ec2 instance")
+    val sparkEmrManagedSecurityGroupIdSlave = settingKey[Option[String]]("EMR security group ids for the slave ec2 instances")
+    val sparkAdditionalSecurityGroupIdsMaster = settingKey[Seq[String]]("additional security group ids for the master ec2 instance")
+    val sparkAdditionalSecurityGroupIdsSlave = settingKey[Seq[String]]("additional security group ids for the slave ec2 instances")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
+    val sparkClusterConfigurationS3Location = settingKey[Option[String]]("S3 location for the EMR cluster configuration")
+    val sparkClusterAdditionalApplications = settingKey[Seq[String]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
     val sparkSettings = settingKey[Settings]("wrapper object for above settings")
+
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
     val sparkListClusters = taskKey[Unit]("list existing active clusters")
@@ -69,9 +75,14 @@ object EmrSparkPlugin extends AutoPlugin {
     instanceType: String,
     instanceBidPrice: Option[String],
     instanceRole: String,
-    additionalSecurityGroupIds: Option[Seq[String]],
+    emrManagedSecurityGroupIdMaster: Option[String],
+    emrManagedSecurityGroupIdSlave: Option[String],
+    additionalSecurityGroupIdsMaster: Seq[String],
+    additionalSecurityGroupIdsSlave: Seq[String],
     s3JarFolder: String,
-    s3LoggingFolder: Option[String]
+    s3LoggingFolder: Option[String],
+    clusterConfigurationS3Location: Option[String],
+    clusterAdditionalApplications: Seq[String]
   )
 
   override lazy val projectSettings = Seq(
@@ -83,8 +94,13 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
-    sparkAdditionalSecurityGroupIds := None,
+    sparkEmrManagedSecurityGroupIdMaster := None,
+    sparkEmrManagedSecurityGroupIdSlave := None,
+    sparkAdditionalSecurityGroupIdsMaster := Nil,
+    sparkAdditionalSecurityGroupIdsSlave := Nil,
     sparkS3LoggingFolder := None,
+    sparkClusterConfigurationS3Location := None,
+    sparkClusterAdditionalApplications := Nil,
 
     sparkSettings := Settings(
       sparkClusterName.value,
@@ -96,9 +112,14 @@ object EmrSparkPlugin extends AutoPlugin {
       sparkInstanceType.value,
       sparkInstanceBidPrice.value,
       sparkInstanceRole.value,
-      sparkAdditionalSecurityGroupIds.value,
+      sparkEmrManagedSecurityGroupIdMaster.value,
+      sparkEmrManagedSecurityGroupIdSlave.value,
+      sparkAdditionalSecurityGroupIdsMaster.value,
+      sparkAdditionalSecurityGroupIdsSlave.value,
       sparkS3JarFolder.value,
-      sparkS3LoggingFolder.value
+      sparkS3LoggingFolder.value,
+      sparkClusterConfigurationS3Location.value,
+      sparkClusterAdditionalApplications.value
     ),
 
     sparkCreateCluster := {
@@ -165,63 +186,84 @@ object EmrSparkPlugin extends AutoPlugin {
       .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
       .getClusters().asScala
       .map(_.getName)
+
     if (clustersNames.exists(_ == settings.clusterName)) {
       log.error(s"A cluster with name ${settings.clusterName} already exists.")
     } else {
-      val request = Some(new RunJobFlowRequest())
-        .map(r => settings.s3LoggingFolder.map(folder => r.withLogUri(folder)).getOrElse(r))
-        .map(r => stepConfig.map(c => r.withSteps(c)).getOrElse(r))
-        .get
-        .withName(settings.clusterName)
-        .withApplications(new Application().withName("Spark"))
+
+
+      val request = new RunJobFlowRequest()
+
+      settings.s3LoggingFolder.foreach(request.setLogUri)
+
+      settings.clusterConfigurationS3Location.foreach { location =>
+        request.setConfigurations(loadConfigFromS3(location).asJava)
+      }
+
+      stepConfig.foreach(s => request.withSteps(s))
+
+      val applications = ("Spark" +: settings.clusterAdditionalApplications).map(name => new Application().withName(name))
+
+      request.withName(settings.clusterName)
+        .withApplications(applications.asJava)
         .withReleaseLabel(settings.emrRelease)
         .withServiceRole(settings.emrServiceRole)
         .withJobFlowRole(settings.instanceRole)
-        .withInstances(
-          Some(new JobFlowInstancesConfig())
-            .map(c => settings.subnetId.map(id => c.withEc2SubnetId(id)).getOrElse(c))
-            .map { c =>
-              settings.additionalSecurityGroupIds.map { ids =>
-                c.withAdditionalMasterSecurityGroups(ids: _*).withAdditionalSlaveSecurityGroups(ids: _*)
-              }.getOrElse(c)
+        .withInstances {
+          val jobFlowConfig = new JobFlowInstancesConfig()
+          settings.subnetId.foreach(jobFlowConfig.setEc2SubnetId)
+
+          if(settings.additionalSecurityGroupIdsMaster.nonEmpty)
+            jobFlowConfig.setAdditionalMasterSecurityGroups(settings.additionalSecurityGroupIdsMaster.asJava)
+
+          if(settings.additionalSecurityGroupIdsSlave.nonEmpty)
+            jobFlowConfig.setAdditionalSlaveSecurityGroups(settings.additionalSecurityGroupIdsSlave.asJava)
+
+          settings.emrManagedSecurityGroupIdMaster.foreach(
+            jobFlowConfig.setEmrManagedMasterSecurityGroup
+          )
+
+          settings.emrManagedSecurityGroupIdSlave.foreach(
+            jobFlowConfig.setEmrManagedSlaveSecurityGroup
+          )
+
+          def newInstanceGroup(): InstanceGroupConfig = {
+            val group =  new InstanceGroupConfig()
+            settings.instanceBidPrice.fold(
+              group.withMarket(MarketType.ON_DEMAND)
+            )(
+              group.withMarket(MarketType.SPOT).withBidPrice
+            )
+
+          }
+
+          jobFlowConfig.withInstanceGroups({
+            val masterConfig = newInstanceGroup()
+
+            masterConfig.withInstanceCount(1)
+              .withInstanceRole(InstanceRoleType.MASTER)
+              .withInstanceType(settings.instanceType)
+
+            val slaveCount = settings.instanceCount - 1
+
+            if (slaveCount <= 0)
+              Seq(masterConfig).asJava
+            else {
+              val slaveConfig = newInstanceGroup()
+              slaveConfig.withInstanceCount(slaveCount)
+                .withInstanceRole(InstanceRoleType.CORE)
+                .withInstanceType(settings.instanceType)
+
+              Seq(masterConfig, slaveConfig).asJava
             }
-            .get
-            .withInstanceGroups({
-              val masterConfig = Some(new InstanceGroupConfig())
-                .map { c =>
-                  settings.instanceBidPrice.map { price =>
-                    c.withMarket("SPOT").withBidPrice(price)
-                  }.getOrElse(c)
-                }
-                .get
-                .withInstanceCount(1)
-                .withInstanceRole("MASTER")
-                .withInstanceType(settings.instanceType)
-
-              val slaveCount = settings.instanceCount - 1
-              val slaveConfig = Some(new InstanceGroupConfig())
-                .map { c =>
-                  settings.instanceBidPrice.map { price =>
-                    c.withMarket("SPOT").withBidPrice(price)
-                  }.getOrElse(c)
-                }
-                .get
-                .withInstanceCount(slaveCount)
-                .withInstanceRole("CORE")
-                .withInstanceType(settings.instanceType)
-
-              if (slaveCount <= 0) {
-                Seq(masterConfig).asJava
-              } else {
-                Seq(masterConfig, slaveConfig).asJava
-              }
-            })
-            .withKeepJobFlowAliveWhenNoSteps(stepConfig.isEmpty)
-        )
+          }).withKeepJobFlowAliveWhenNoSteps(stepConfig.isEmpty)
+        }
       val res = emr.runJobFlow(request)
       log.info(s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
     }
   }
+
+
 
   def submitJob(
     settings: Settings,
@@ -229,25 +271,16 @@ object EmrSparkPlugin extends AutoPlugin {
     args: Seq[String],
     jar: File
   )(implicit log: Logger) = {
-    //validation
-    //TODO: avoid throwing exceptions here
-    assert(settings.s3JarFolder.startsWith("s3://"), "sparkS3JarLocation should starts with \"s3://\".")
-    val pathWithoutPrefix = settings.s3JarFolder.drop(5)
 
-    val bucket = pathWithoutPrefix.split("/").head
-    assert(bucket != "", "The bucket name in sparkS3JarLocation is empty.")
-
-    assert(pathWithoutPrefix.endsWith("/"), "sparkS3JarLocation should ends with \"/\".")
-
-    //put jar to s3
     log.info("Uploading the jar.")
-    val s3 = AmazonS3ClientBuilder.defaultClient()
-    val key = (pathWithoutPrefix.split("/").tail :+ jar.getName).mkString("/")
 
-    s3.putObject(bucket, key, jar)
+    val s3JarFolderUrl = S3Url(settings.s3JarFolder)
+    val s3 = AmazonS3ClientBuilder.defaultClient()
+    val key = s3JarFolderUrl.key.fold(jar.getName)(_ + "/" + jar.getName)
+
+    s3.putObject(s3JarFolderUrl.bucket, key, jar)
     log.info("Jar uploaded.")
 
-    val s3JarLocation = "s3://" + bucket + "/" + key
 
     //find the cluster
     val emr = buildEmr(settings)
@@ -265,7 +298,7 @@ object EmrSparkPlugin extends AutoPlugin {
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3JarLocation) ++ args).asJava)
+          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3JarFolderUrl.copy(key = Some(key)).toString) ++ args).asJava)
       )
     clusterIdOpt match {
       case Some(clusterId) =>
@@ -280,9 +313,53 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   }
 
+
   def buildEmr(settings: Settings): AmazonElasticMapReduce = {
     val builder = AmazonElasticMapReduceClientBuilder.standard()
     builder.setRegion(settings.awsRegion)
     builder.build()
   }
+
+  import play.api.libs.json.Json
+  implicit val reads = Json.reads[ConfigScala]
+
+  def loadConfigFromS3(configLocation: String)(implicit log: Logger): List[EMRConfiguration] = {
+    val s3 = AmazonS3ClientBuilder.defaultClient()
+    val url = S3Url(configLocation)
+    if(url.key.isEmpty) {
+      sys.error("s3 url for config file is missing a key")
+    } else {
+    val input = s3.getObject(url.bucket, url.key.get).getObjectContent
+
+    log.info(s"Importing configuration from $configLocation")
+
+    Json.parse(input).validate[List[ConfigScala]].fold(
+      _ => sys.error("failed to parse json") ,
+      _.map { cs =>
+        new EMRConfiguration().
+          withClassification(cs.classification).
+          withProperties(cs.properties.asJava)
+      })
+    }
+  }
+
+  case class ConfigScala(classification: String, properties: Map[String, String])
+
+  final case class S3Url(bucket: String, key: Option[String]) {
+    override val toString =  s"s3://$bucket/${key.getOrElse("")}"
+  }
+
+  object S3Url {
+    def apply(url: String): S3Url = {
+      if(url.startsWith("s3://")) {
+        val (bucket, key) = url.drop(5).split("/").toList match {
+          case head :: Nil =>  (head, None)
+          case head :: tail => (head, Some(tail.mkString("/")))
+          case _ => sys.error(s"unrecognized s3 url: $url")
+        }
+        S3Url(bucket, key)
+      } else sys.error("S3Location should starts with \"s3://\".")
+    }
+  }
+
 }
