@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.5.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.6.0")
   ```
 
 2. Prepare your `build.sbt`
@@ -29,7 +29,8 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   sparkSubnetId := Some("subnet-xxxxxxxx")
 
   //(optional) Additional security groups that will be attached to master and slave's ec2.
-  sparkAdditionalSecurityGroupIds := Some(Seq("sg-xxxxxxxx"))
+  sparkAdditionalMasterSecurityGroups := Some(Seq("sg-xxxxxxxx"))
+  sparkAdditionalSlaveSecurityGroups := sparkAdditionalMasterSecurityGroups.value
 
   //Since we use cluster mode, we need a bucket to store your application's jar.
   sparkS3JarFolder := "s3://my-emr-bucket/my-emr-folder/"
@@ -93,6 +94,11 @@ sparkInstanceBidPrice := Some("0.38")
 sparkInstanceRole := "EMR_EC2_DefaultRole"
 
 sparkS3LoggingFolder := Some("s3://aws-logs-xxxxxxxxxxxx-ap-northeast-1/elasticmapreduce/")
+
+//The json configuration from S3 http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-configure-apps.html
+sparkS3JsonConfiguration := Some("s3://my-emr-bucket/my-emr-config.json")
+
+sparkAdditionalApplications := Some(Seq("Presto", "Flink"))
 ```
 
 ## Other available commands
