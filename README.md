@@ -84,8 +84,11 @@ sparkEmrRelease := "emr-5.4.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
 
-//EC2's instance type. Will applied to both master and slave nodes.
+//EC2's instance type. Will be applied to both master and slave nodes.
 sparkInstanceType := "m3.xlarge"
+
+sparkEmrManagedMasterSecurityGroup := Some("sg-xxxxxxxx")
+sparkEmrManagedSlaveSecurityGroup := Some("sg-xxxxxxxx")
 
 //Bid price for your spot instance.
 //The default value is None, which means all the instance will be on demand.
