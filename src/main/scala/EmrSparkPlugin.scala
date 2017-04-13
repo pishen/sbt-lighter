@@ -234,7 +234,7 @@ object EmrSparkPlugin extends AutoPlugin {
             .get
             .withInstanceGroups {
               val masterConfig = Some(new InstanceGroupConfig())
-                .map(c => settings.instanceBidPrice.fold(c)(c.withMarket(MarketType.SPOT).withBidPrice))
+                .map(c => settings.instanceBidPrice.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
                 .get
                 .withInstanceCount(1)
                 .withInstanceRole(InstanceRoleType.MASTER)
@@ -242,7 +242,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
               val slaveCount = settings.instanceCount - 1
               val slaveConfig = Some(new InstanceGroupConfig())
-                .map(c => settings.instanceBidPrice.fold(c)(c.withMarket(MarketType.SPOT).withBidPrice))
+                .map(c => settings.instanceBidPrice.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
                 .get
                 .withInstanceCount(slaveCount)
                 .withInstanceRole(InstanceRoleType.CORE)
