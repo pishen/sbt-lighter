@@ -28,6 +28,9 @@ import sbt.Keys._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
+import java.util.Collection
+import java.util.ArrayList
+import scala.util.Try
 
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
@@ -36,6 +39,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkAwsRegion = settingKey[String]("aws's region")
     val sparkEmrRelease = settingKey[String]("emr's release label")
     val sparkEmrServiceRole = settingKey[String]("emr's service role")
+    val sparkEmrAutoScalingRole = settingKey[Option[String]]("emr Auto scaling role")
+    val sparkKeyName = settingKey[Option[String]]("Key pair name")
     val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
     val sparkInstanceCount = settingKey[Int]("total number of instances")
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
@@ -49,6 +54,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     val sparkS3JsonConfiguration = settingKey[Option[String]]("S3 location for the EMR cluster json configuration")
     val sparkAdditionalApplications = settingKey[Option[Seq[String]]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
+    val sparkEMRSteps = settingKey[Option[Seq[StepConfig]]]("Multiple steps to run once cluster is setup")
     val sparkSettings = settingKey[Settings]("wrapper object for above settings")
 
     //commands
@@ -57,6 +63,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain = inputKey[Unit]("submit the job with specified main class")
+    val sparkSubmitSteps = taskKey[Unit]("submit multiple steps")
+    val sparkUploadJarToS3 = taskKey[Unit]("Upload jar to S3")
   }
   import autoImport._
 
@@ -70,6 +78,8 @@ object EmrSparkPlugin extends AutoPlugin {
     awsRegion: String,
     emrRelease: String,
     emrServiceRole: String,
+    emrAutoScalingRole: Option[String],
+    keyName: Option[String],
     subnetId: Option[String],
     instanceCount: Int,
     instanceType: String,
@@ -89,6 +99,8 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkClusterName := name.value,
     sparkEmrRelease := "emr-5.4.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
+    sparkEmrAutoScalingRole := None,
+    sparkKeyName := None,
     sparkSubnetId := None,
     sparkInstanceCount := 1,
     sparkInstanceType := "m3.xlarge",
@@ -101,12 +113,15 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkS3LoggingFolder := None,
     sparkS3JsonConfiguration := None,
     sparkAdditionalApplications := None,
+    sparkEMRSteps := None,
 
     sparkSettings := Settings(
       sparkClusterName.value,
       sparkAwsRegion.value,
       sparkEmrRelease.value,
       sparkEmrServiceRole.value,
+      sparkEmrAutoScalingRole.value,
+      sparkKeyName.value,
       sparkSubnetId.value,
       sparkInstanceCount.value,
       sparkInstanceType.value,
@@ -124,6 +139,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
     sparkCreateCluster := {
       implicit val log = streams.value.log
+      log.debug("Starting EMR cluster with config \n " + sparkSettings.value)
       createCluster(sparkSettings.value, None)
     },
 
@@ -140,6 +156,20 @@ object EmrSparkPlugin extends AutoPlugin {
         val (mainClass, args) = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil)).parsed
         submitJob(sparkSettings.value, mainClass, args, assembly.value)
       }.evaluated
+    },
+
+    sparkSubmitSteps := {
+      implicit val log = streams.value.log
+      sparkEMRSteps.value match {
+        case Some(steps) => submitSteps(sparkSettings.value, steps)
+        case None => sys.error("Steps not defined for sparkSubmitSteps task.")
+      }
+    },
+
+    sparkUploadJarToS3 := {
+      implicit val log = streams.value.log
+      if(Try(uploadJarToS3(sparkSettings.value.s3JarFolder, assembly.value.getName)).isFailure)
+        sys.error("Failed to upload application jar to S3.")
     },
 
     sparkTerminateCluster := {
@@ -180,7 +210,7 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   )
 
-  def createCluster(settings: Settings, stepConfig: Option[StepConfig])(implicit log: Logger) = {
+  def createCluster(settings: Settings, stepConfig: Option[Collection[StepConfig]])(implicit log: Logger) = {
     val emr = buildEmr(settings)
     val clustersNames = emr
       .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
@@ -193,6 +223,7 @@ object EmrSparkPlugin extends AutoPlugin {
       val request = Some(new RunJobFlowRequest())
         .map(r => settings.s3LoggingFolder.fold(r)(folder => r.withLogUri(folder)))
         .map(r => stepConfig.fold(r)(c => r.withSteps(c)))
+        .map(r => settings.emrAutoScalingRole.fold(r)(c => r.withAutoScalingRole(c)))
         .map(r => settings.s3JsonConfiguration.fold(r) { url =>
           log.info(s"Importing configuration from $url")
           val s3 = AmazonS3ClientBuilder.defaultClient()
@@ -220,13 +251,14 @@ object EmrSparkPlugin extends AutoPlugin {
         })
         .get
         .withName(settings.clusterName)
-        .withApplications(("Spark" +: settings.additionalApplications.getOrElse(Seq.empty)).map(new Application().withName): _*)
+        .withApplications(("Spark" +: settings.additionalApplications.getOrElse(Seq.empty)).map(app => new Application().withName(app)): _*)
         .withReleaseLabel(settings.emrRelease)
         .withServiceRole(settings.emrServiceRole)
         .withJobFlowRole(settings.instanceRole)
         .withInstances {
           Some(new JobFlowInstancesConfig())
             .map(c => settings.subnetId.fold(c)(id => c.withEc2SubnetId(id)))
+            .map(c => settings.keyName.fold(c)(key => c.withEc2KeyName(key)))
             .map(c => settings.emrManagedMasterSecurityGroup.fold(c)(c.withEmrManagedMasterSecurityGroup))
             .map(c => settings.emrManagedSlaveSecurityGroup.fold(c)(c.withEmrManagedSlaveSecurityGroup))
             .map(c => settings.additionalMasterSecurityGroups.fold(c)(ids => c.withAdditionalMasterSecurityGroups(ids: _*)))
@@ -261,37 +293,41 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   }
 
+  def uploadJarToS3(s3Location: String, jarFile: String)(implicit log: Logger) = {
+    log.info("Uploading jar to S3 path " + s3Location)
+    val s3 = AmazonS3ClientBuilder.defaultClient()
+    val jarUrl = new S3Url(s3Location)
+    s3.putObject(jarUrl.bucket, jarUrl.key, jarFile)
+    log.info("Jar uploaded.")
+  }
+
+  def getClusterId(settings: Settings): Option[String] = {
+    buildEmr(settings)
+      .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+      .getClusters().asScala
+      .find(_.getName == settings.clusterName)
+      .map(_.getId)
+  }
+
   def submitJob(
     settings: Settings,
     mainClass: String,
     args: Seq[String],
     jar: File
   )(implicit log: Logger) = {
-    log.info("Uploading the jar.")
 
-    val s3 = AmazonS3ClientBuilder.defaultClient()
-    val jarUrl = new S3Url(settings.s3JarFolder) / jar.getName
-
-    s3.putObject(jarUrl.bucket, jarUrl.key, jar)
-    log.info("Jar uploaded.")
-
-    //find the cluster
+    val s3Location = settings.s3JarFolder + jar.getName
+    uploadJarToS3(s3Location, jar.getName)
+    val clusterIdOpt = getClusterId(settings)
     val emr = buildEmr(settings)
-
-    val clusterIdOpt = emr
-      .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
-      .getClusters().asScala
-      .find(_.getName == settings.clusterName)
-      .map(_.getId)
-
-    //submit job
+    //submit job
     val stepConfig = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
       .withName("Spark Step")
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, jarUrl.toString) ++ args).asJava)
+          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3Location) ++ args).asJava)
       )
     clusterIdOpt match {
       case Some(clusterId) =>
@@ -302,7 +338,26 @@ object EmrSparkPlugin extends AutoPlugin {
         )
         log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
       case None =>
-        createCluster(settings, Some(stepConfig))
+        createCluster(settings, Some(List(stepConfig).asJava))
+    }
+  }
+
+  def submitSteps(
+    settings: Settings,
+    steps: Seq[StepConfig]
+  )(implicit log: Logger) = {
+
+    getClusterId(settings) match {
+      case Some(clusterId) =>
+        val res = buildEmr(settings).addJobFlowSteps(
+          new AddJobFlowStepsRequest()
+            .withJobFlowId(clusterId)
+            .withSteps(steps.asJavaCollection)
+        )
+        log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
+      case None =>
+        log.warn("Couldn't find cluster. Will create one before submitting")
+        createCluster(settings, Some(steps.asJavaCollection))
     }
   }
 
