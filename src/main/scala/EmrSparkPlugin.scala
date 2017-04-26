@@ -29,7 +29,6 @@ import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
 import java.util.Collection
-import java.util.ArrayList
 import scala.util.Try
 
 object EmrSparkPlugin extends AutoPlugin {
@@ -54,7 +53,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
     val sparkS3JsonConfiguration = settingKey[Option[String]]("S3 location for the EMR cluster json configuration")
     val sparkAdditionalApplications = settingKey[Option[Seq[String]]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
-    val sparkEMRSteps = settingKey[Option[Seq[StepConfig]]]("Multiple steps to run once cluster is setup")
+    val sparkEmrSteps = settingKey[Option[Seq[StepConfig]]]("Multiple steps to run once cluster is setup")
     val sparkSettings = settingKey[Settings]("wrapper object for above settings")
 
     //commands
@@ -113,7 +112,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkS3LoggingFolder := None,
     sparkS3JsonConfiguration := None,
     sparkAdditionalApplications := None,
-    sparkEMRSteps := None,
+    sparkEmrSteps := None,
 
     sparkSettings := Settings(
       sparkClusterName.value,
@@ -160,7 +159,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
     sparkSubmitSteps := {
       implicit val log = streams.value.log
-      sparkEMRSteps.value match {
+      sparkEmrSteps.value match {
         case Some(steps) => submitSteps(sparkSettings.value, steps)
         case None => sys.error("Steps not defined for sparkSubmitSteps task.")
       }
@@ -168,7 +167,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
     sparkUploadJarToS3 := {
       implicit val log = streams.value.log
-      if(Try(uploadJarToS3(sparkSettings.value.s3JarFolder, assembly.value.getName)).isFailure)
+      if(Try(uploadJarToS3(sparkSettings.value.s3JarFolder, assembly.value)).isFailure)
         sys.error("Failed to upload application jar to S3.")
     },
 
@@ -293,12 +292,13 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   }
 
-  def uploadJarToS3(s3Location: String, jarFile: String)(implicit log: Logger) = {
-    log.info("Uploading jar to S3 path " + s3Location)
+  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger) = {
+    log.info(s"Uploading jar ${jarFile.getName} to S3 path $s3Location")
     val s3 = AmazonS3ClientBuilder.defaultClient()
-    val jarUrl = new S3Url(s3Location)
+    val jarUrl = new S3Url(s3Location) / jarFile.getName
+    val startTime = System.currentTimeMillis
     s3.putObject(jarUrl.bucket, jarUrl.key, jarFile)
-    log.info("Jar uploaded.")
+    log.info(s"Jar uploaded in ${(System.currentTimeMillis-startTime)/1000} secs")
   }
 
   def getClusterId(settings: Settings): Option[String] = {
@@ -316,11 +316,11 @@ object EmrSparkPlugin extends AutoPlugin {
     jar: File
   )(implicit log: Logger) = {
 
-    val s3Location = settings.s3JarFolder + jar.getName
-    uploadJarToS3(s3Location, jar.getName)
+    val s3Location = settings.s3JarFolder
+    uploadJarToS3(s3Location, jar)
     val clusterIdOpt = getClusterId(settings)
     val emr = buildEmr(settings)
-    //submit job
+    //submit job
     val stepConfig = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
       .withName("Spark Step")
