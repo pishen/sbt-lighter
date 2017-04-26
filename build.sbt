@@ -1,5 +1,7 @@
 name := "sbt-emr-spark"
 
+version := "0.7.0"
+
 scalaVersion := "2.10.6"
 
 sbtPlugin := true

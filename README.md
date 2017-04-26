@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.6.1")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.7.0")
   ```
 
 2. Prepare your `build.sbt`
@@ -83,6 +83,10 @@ sparkClusterName := "your-new-cluster-name"
 sparkEmrRelease := "emr-5.4.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
+
+sparkEmrAutoScalingRole := Some("EMR_AutoScaling_DefaultRole")
+
+sparkKeyName := Some("your-keypair")
 
 //EC2's instance type. Will be applied to both master and slave nodes.
 sparkInstanceType := "m3.xlarge"
