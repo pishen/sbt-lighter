@@ -118,6 +118,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkAdditionalApplications := None,
     sparkEmrSteps := None,
 
+
     sparkSettings := Settings(
       sparkClusterName.value,
       sparkAwsRegion.value,
@@ -298,13 +299,14 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   }
 
-  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger) = {
+  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger): S3Url = {
     log.info(s"Uploading jar ${jarFile.getName} to S3 path $s3Location")
     val s3 = AmazonS3ClientBuilder.defaultClient()
     val jarUrl = new S3Url(s3Location) / jarFile.getName
     val startTime = System.currentTimeMillis
     s3.putObject(jarUrl.bucket, jarUrl.key, jarFile)
     log.info(s"Jar uploaded in ${(System.currentTimeMillis-startTime)/1000} secs")
+    jarUrl
   }
 
   def getClusterId(settings: Settings): Option[String] = {
@@ -323,7 +325,7 @@ object EmrSparkPlugin extends AutoPlugin {
   )(implicit log: Logger) = {
 
     val s3Location = settings.s3JarFolder
-    uploadJarToS3(s3Location, jar)
+    val uploadedAt = uploadJarToS3(s3Location, jar)
     val clusterIdOpt = getClusterId(settings)
     val emr = buildEmr(settings)
     //submit job
@@ -333,7 +335,7 @@ object EmrSparkPlugin extends AutoPlugin {
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3Location) ++ args).asJava)
+          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, uploadedAt.toString) ++ args).asJava)
       )
     clusterIdOpt match {
       case Some(clusterId) =>
