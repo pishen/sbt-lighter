@@ -45,6 +45,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
+    val sparkTags = settingKey[Map[String, String]]("spark ec2 instance's tags")
     val sparkEmrManagedMasterSecurityGroup = settingKey[Option[String]]("EMR managed security group ids for the master ec2 instance")
     val sparkEmrManagedSlaveSecurityGroup = settingKey[Option[String]]("EMR security group ids for the slave ec2 instances")
     val sparkAdditionalMasterSecurityGroups = settingKey[Option[Seq[String]]]("additional security group ids for the master ec2 instance")
@@ -80,10 +81,12 @@ object EmrSparkPlugin extends AutoPlugin {
     emrAutoScalingRole: Option[String],
     keyName: Option[String],
     subnetId: Option[String],
+    tags: Map[String, String],
     instanceCount: Int,
     instanceType: String,
     instanceBidPrice: Option[String],
     instanceRole: String,
+
     emrManagedMasterSecurityGroup: Option[String],
     emrManagedSlaveSecurityGroup: Option[String],
     additionalMasterSecurityGroups: Option[Seq[String]],
@@ -105,6 +108,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkTags := Map(),
     sparkEmrManagedMasterSecurityGroup := None,
     sparkEmrManagedSlaveSecurityGroup := None,
     sparkAdditionalMasterSecurityGroups := None,
@@ -122,6 +126,7 @@ object EmrSparkPlugin extends AutoPlugin {
       sparkEmrAutoScalingRole.value,
       sparkKeyName.value,
       sparkSubnetId.value,
+      sparkTags.value,
       sparkInstanceCount.value,
       sparkInstanceType.value,
       sparkInstanceBidPrice.value,
@@ -249,6 +254,7 @@ object EmrSparkPlugin extends AutoPlugin {
           r.withConfigurations(parseConfigurations(json): _*)
         })
         .get
+        .withTags(settings.tags.map({ case (k,v) => new Tag(k, v)}).asJavaCollection)
         .withName(settings.clusterName)
         .withApplications(("Spark" +: settings.additionalApplications.getOrElse(Seq.empty)).map(app => new Application().withName(app)): _*)
         .withReleaseLabel(settings.emrRelease)
