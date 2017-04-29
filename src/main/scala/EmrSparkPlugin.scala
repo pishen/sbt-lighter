@@ -45,6 +45,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
+    val sparkTags = settingKey[Map[String, String]]("spark ec2 instance's tags")
     val sparkEmrManagedMasterSecurityGroup = settingKey[Option[String]]("EMR managed security group ids for the master ec2 instance")
     val sparkEmrManagedSlaveSecurityGroup = settingKey[Option[String]]("EMR security group ids for the slave ec2 instances")
     val sparkAdditionalMasterSecurityGroups = settingKey[Option[Seq[String]]]("additional security group ids for the master ec2 instance")
@@ -80,10 +81,12 @@ object EmrSparkPlugin extends AutoPlugin {
     emrAutoScalingRole: Option[String],
     keyName: Option[String],
     subnetId: Option[String],
+    tags: Map[String, String],
     instanceCount: Int,
     instanceType: String,
     instanceBidPrice: Option[String],
     instanceRole: String,
+
     emrManagedMasterSecurityGroup: Option[String],
     emrManagedSlaveSecurityGroup: Option[String],
     additionalMasterSecurityGroups: Option[Seq[String]],
@@ -105,6 +108,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkTags := Map(),
     sparkEmrManagedMasterSecurityGroup := None,
     sparkEmrManagedSlaveSecurityGroup := None,
     sparkAdditionalMasterSecurityGroups := None,
@@ -114,6 +118,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkAdditionalApplications := None,
     sparkEmrSteps := None,
 
+
     sparkSettings := Settings(
       sparkClusterName.value,
       sparkAwsRegion.value,
@@ -122,6 +127,7 @@ object EmrSparkPlugin extends AutoPlugin {
       sparkEmrAutoScalingRole.value,
       sparkKeyName.value,
       sparkSubnetId.value,
+      sparkTags.value,
       sparkInstanceCount.value,
       sparkInstanceType.value,
       sparkInstanceBidPrice.value,
@@ -249,6 +255,7 @@ object EmrSparkPlugin extends AutoPlugin {
           r.withConfigurations(parseConfigurations(json): _*)
         })
         .get
+        .withTags(settings.tags.map({ case (k,v) => new Tag(k, v)}).asJavaCollection)
         .withName(settings.clusterName)
         .withApplications(("Spark" +: settings.additionalApplications.getOrElse(Seq.empty)).map(app => new Application().withName(app)): _*)
         .withReleaseLabel(settings.emrRelease)
@@ -292,13 +299,14 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   }
 
-  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger) = {
+  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger): S3Url = {
     log.info(s"Uploading jar ${jarFile.getName} to S3 path $s3Location")
     val s3 = AmazonS3ClientBuilder.defaultClient()
     val jarUrl = new S3Url(s3Location) / jarFile.getName
     val startTime = System.currentTimeMillis
     s3.putObject(jarUrl.bucket, jarUrl.key, jarFile)
     log.info(s"Jar uploaded in ${(System.currentTimeMillis-startTime)/1000} secs")
+    jarUrl
   }
 
   def getClusterId(settings: Settings): Option[String] = {
@@ -317,7 +325,7 @@ object EmrSparkPlugin extends AutoPlugin {
   )(implicit log: Logger) = {
 
     val s3Location = settings.s3JarFolder
-    uploadJarToS3(s3Location, jar)
+    val uploadedAt = uploadJarToS3(s3Location, jar)
     val clusterIdOpt = getClusterId(settings)
     val emr = buildEmr(settings)
     //submit job
@@ -327,7 +335,7 @@ object EmrSparkPlugin extends AutoPlugin {
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3Location) ++ args).asJava)
+          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, uploadedAt.toString) ++ args).asJava)
       )
     clusterIdOpt match {
       case Some(clusterId) =>
