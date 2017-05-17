@@ -68,10 +68,11 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   > sparkSubmitJob arg0 arg1 ...
   ```
 
-> Note that a cluster with the same name as your project's `name` will be created by default if not exist. And this cluster will terminate itself automatically if there's no further jobs (steps) waiting in the queue.
-> If you want a keep-alive cluster, execute the following command before you submit your first job:
+> Note that a cluster with the same name as your project's `name` will be created by default if not exist. And this cluster will terminate itself automatically if there's no further jobs (steps) waiting in the queue. (You can submit multiple jobs (steps) into the queue by executing `sparkSubmitJob` multiple times.)
+> If you want a keep-alive cluster, which doesn't terminate itself automatically, execute `sparkCreateCluster` before `sparkSubmitJob` and terminate it by `sparkTerminateCluster`:
 > ```
 > > sparkCreateCluster
+> > sparkSubmitJob arg0 arg1 ...
 > ```
 
 ## Other available settings
