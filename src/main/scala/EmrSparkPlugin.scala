@@ -14,10 +14,10 @@
 
 package sbtemrspark
 
+import com.amazonaws.services.elasticmapreduce.AmazonElasticMapReduceClientBuilder
+import com.amazonaws.services.elasticmapreduce.model.{ Unit => _, Configuration => AwsEmrConfig, _ }
 import scala.collection.JavaConverters._
 
-import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
-import com.amazonaws.services.elasticmapreduce.model.{Unit => _, Configuration => EMRConfiguration, _}
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import play.api.libs.json._
 import sbinary.DefaultProtocol.StringFormat
@@ -30,6 +30,19 @@ import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
 import java.util.Collection
 import scala.util.Try
+
+case class EmrConfig(
+  classification: String,
+  properties: Map[String, String] = Map.empty,
+  emrConfigs: Seq[EmrConfig] = Seq.empty
+) {
+  def toAwsEmrConfig(): AwsEmrConfig = {
+    new AwsEmrConfig()
+      .withClassification(classification)
+      .withProperties(properties.asJava)
+      .withConfigurations(emrConfigs.map(_.toAwsEmrConfig()):_*)
+  }
+}
 
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
@@ -52,7 +65,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkAdditionalSlaveSecurityGroups = settingKey[Option[Seq[String]]]("additional security group ids for the slave ec2 instances")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
     val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
-    val sparkS3JsonConfiguration = settingKey[Option[String]]("S3 location for the EMR cluster json configuration")
+    val sparkEmrConfigs = settingKey[Option[Seq[EmrConfig]]]("EMR configurations")
     val sparkAdditionalApplications = settingKey[Option[Seq[String]]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
     val sparkEmrSteps = settingKey[Option[Seq[StepConfig]]]("Multiple steps to run once cluster is setup")
     val sparkSettings = settingKey[Settings]("wrapper object for above settings")
@@ -92,13 +105,13 @@ object EmrSparkPlugin extends AutoPlugin {
     additionalSlaveSecurityGroups: Option[Seq[String]],
     s3JarFolder: String,
     s3LoggingFolder: Option[String],
-    s3JsonConfiguration: Option[String],
+    emrConfigs: Option[Seq[EmrConfig]],
     additionalApplications: Option[Seq[String]]
   )
 
   override lazy val projectSettings = Seq(
     sparkClusterName := name.value,
-    sparkEmrRelease := "emr-5.4.0",
+    sparkEmrRelease := "emr-5.5.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrAutoScalingRole := None,
     sparkKeyName := None,
@@ -113,7 +126,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkAdditionalMasterSecurityGroups := None,
     sparkAdditionalSlaveSecurityGroups := None,
     sparkS3LoggingFolder := None,
-    sparkS3JsonConfiguration := None,
+    sparkEmrConfigs := None,
     sparkAdditionalApplications := None,
     sparkEmrSteps := None,
 
@@ -136,7 +149,7 @@ object EmrSparkPlugin extends AutoPlugin {
       sparkAdditionalSlaveSecurityGroups.value,
       sparkS3JarFolder.value,
       sparkS3LoggingFolder.value,
-      sparkS3JsonConfiguration.value,
+      sparkEmrConfigs.value,
       sparkAdditionalApplications.value
     ),
 
@@ -227,30 +240,8 @@ object EmrSparkPlugin extends AutoPlugin {
         .map(r => settings.s3LoggingFolder.fold(r)(folder => r.withLogUri(folder)))
         .map(r => stepConfig.fold(r)(c => r.withSteps(c)))
         .map(r => settings.emrAutoScalingRole.fold(r)(c => r.withAutoScalingRole(c)))
-        .map(r => settings.s3JsonConfiguration.fold(r) { url =>
-          log.info(s"Importing configuration from $url")
-          val s3 = AmazonS3ClientBuilder.defaultClient()
-          val s3Url = new S3Url(url)
-          val json = Json.parse(s3.getObject(s3Url.bucket, s3Url.key).getObjectContent)
-          def parseConfigurations(json: JsValue): Seq[EMRConfiguration] = {
-            json.as[Seq[JsObject]].map { obj =>
-              Some(new EMRConfiguration())
-                .map { conf =>
-                  (obj \ "Properties").asOpt[Map[String, String]]
-                    .filter(_.nonEmpty)
-                    .fold(conf)(props => conf.withProperties(props.asJava))
-                }
-                .map { conf =>
-                  (obj \ "Configurations").asOpt[JsValue]
-                    .map(json => parseConfigurations(json))
-                    .filter(_.nonEmpty)
-                    .fold(conf)(confs => conf.withConfigurations(confs: _*))
-                }
-                .get
-                .withClassification((obj \ "Classification").as[String])
-            }
-          }
-          r.withConfigurations(parseConfigurations(json): _*)
+        .map(r => settings.emrConfigs.fold(r) { emrConfigs =>
+          r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()):_*)
         })
         .map(r => settings.tags.fold(r)(tags => r.withTags(tags.map { case (k, v) => new Tag(k, v) }.asJavaCollection)))
         .get

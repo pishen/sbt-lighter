@@ -1,12 +1,12 @@
 name := "sbt-emr-spark"
 
-version := "0.7.1"
+version := "0.8.0-SNAPSHOT"
 
 scalaVersion := "2.10.6"
 
 sbtPlugin := true
 
-val awsVersion = "1.11.111"
+val awsVersion = "1.11.134"
 
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % awsVersion,
