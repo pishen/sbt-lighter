@@ -14,12 +14,11 @@
 
 package sbtemrspark
 
-import com.amazonaws.services.elasticmapreduce.AmazonElasticMapReduceClientBuilder
-import com.amazonaws.services.elasticmapreduce.model.{ Unit => _, Configuration => AwsEmrConfig, _ }
 import scala.collection.JavaConverters._
 
+import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
+import com.amazonaws.services.elasticmapreduce.model.{Unit => _, Configuration => AwsEmrConfig, _}
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
-import play.api.libs.json._
 import sbinary.DefaultProtocol.StringFormat
 import sbt._
 import sbt.Cache.seqFormat
@@ -28,8 +27,6 @@ import sbt.Keys._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
-import java.util.Collection
-import scala.util.Try
 
 case class EmrConfig(
   classification: String,
@@ -40,7 +37,7 @@ case class EmrConfig(
     new AwsEmrConfig()
       .withClassification(classification)
       .withProperties(properties.asJava)
-      .withConfigurations(emrConfigs.map(_.toAwsEmrConfig()):_*)
+      .withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
   }
 }
 
@@ -51,24 +48,19 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkAwsRegion = settingKey[String]("aws's region")
     val sparkEmrRelease = settingKey[String]("emr's release label")
     val sparkEmrServiceRole = settingKey[String]("emr's service role")
-    val sparkEmrAutoScalingRole = settingKey[Option[String]]("emr Auto scaling role")
-    val sparkKeyName = settingKey[Option[String]]("Key pair name")
+    val sparkEmrConfigs = settingKey[Option[Seq[EmrConfig]]]("EMR configurations")
     val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
+    val sparkSecurityGroupIds = settingKey[Option[Seq[String]]]("additional security group ids for both master and slave ec2 instances")
     val sparkInstanceCount = settingKey[Int]("total number of instances")
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
-    val sparkTags = settingKey[Option[Map[String, String]]]("spark ec2 instance's tags")
-    val sparkEmrManagedMasterSecurityGroup = settingKey[Option[String]]("EMR managed security group ids for the master ec2 instance")
-    val sparkEmrManagedSlaveSecurityGroup = settingKey[Option[String]]("EMR security group ids for the slave ec2 instances")
-    val sparkAdditionalMasterSecurityGroups = settingKey[Option[Seq[String]]]("additional security group ids for the master ec2 instance")
-    val sparkAdditionalSlaveSecurityGroups = settingKey[Option[Seq[String]]]("additional security group ids for the slave ec2 instances")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
-    val sparkS3LoggingFolder = settingKey[Option[String]]("S3 folder for application's logs")
-    val sparkEmrConfigs = settingKey[Option[Seq[EmrConfig]]]("EMR configurations")
-    val sparkAdditionalApplications = settingKey[Option[Seq[String]]]("Applications other than Spark to be deployed on the EMR cluster, these are case insensitive.")
-    val sparkEmrSteps = settingKey[Option[Seq[StepConfig]]]("Multiple steps to run once cluster is setup")
-    val sparkSettings = settingKey[Settings]("wrapper object for above settings")
+
+    //underlying configs
+    val sparkEmrClientBuilder = settingKey[AmazonElasticMapReduceClientBuilder]("default EMR client builder")
+    val sparkJobFlowInstancesConfig = settingKey[JobFlowInstancesConfig]("default JobFlowInstancesConfig")
+    val sparkRunJobFlowRequest = settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -76,8 +68,6 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain = inputKey[Unit]("submit the job with specified main class")
-    val sparkSubmitSteps = taskKey[Unit]("submit multiple steps")
-    val sparkUploadJarToS3 = taskKey[Unit]("Upload jar to S3")
   }
   import autoImport._
 
@@ -86,131 +76,103 @@ object EmrSparkPlugin extends AutoPlugin {
 
   val activatedClusterStates = Seq(ClusterState.RUNNING, ClusterState.STARTING, ClusterState.WAITING, ClusterState.BOOTSTRAPPING)
 
-  case class Settings(
-    clusterName: String,
-    awsRegion: String,
-    emrRelease: String,
-    emrServiceRole: String,
-    emrAutoScalingRole: Option[String],
-    keyName: Option[String],
-    subnetId: Option[String],
-    tags: Option[Map[String, String]],
-    instanceCount: Int,
-    instanceType: String,
-    instanceBidPrice: Option[String],
-    instanceRole: String,
-    emrManagedMasterSecurityGroup: Option[String],
-    emrManagedSlaveSecurityGroup: Option[String],
-    additionalMasterSecurityGroups: Option[Seq[String]],
-    additionalSlaveSecurityGroups: Option[Seq[String]],
-    s3JarFolder: String,
-    s3LoggingFolder: Option[String],
-    emrConfigs: Option[Seq[EmrConfig]],
-    additionalApplications: Option[Seq[String]]
-  )
-
   override lazy val projectSettings = Seq(
     sparkClusterName := name.value,
     sparkEmrRelease := "emr-5.5.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
-    sparkEmrAutoScalingRole := None,
-    sparkKeyName := None,
+    sparkEmrConfigs := None,
     sparkSubnetId := None,
+    sparkSecurityGroupIds := None,
     sparkInstanceCount := 1,
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
-    sparkTags := None,
-    sparkEmrManagedMasterSecurityGroup := None,
-    sparkEmrManagedSlaveSecurityGroup := None,
-    sparkAdditionalMasterSecurityGroups := None,
-    sparkAdditionalSlaveSecurityGroups := None,
-    sparkS3LoggingFolder := None,
-    sparkEmrConfigs := None,
-    sparkAdditionalApplications := None,
-    sparkEmrSteps := None,
 
-    sparkSettings := Settings(
-      sparkClusterName.value,
-      sparkAwsRegion.value,
-      sparkEmrRelease.value,
-      sparkEmrServiceRole.value,
-      sparkEmrAutoScalingRole.value,
-      sparkKeyName.value,
-      sparkSubnetId.value,
-      sparkTags.value,
-      sparkInstanceCount.value,
-      sparkInstanceType.value,
-      sparkInstanceBidPrice.value,
-      sparkInstanceRole.value,
-      sparkEmrManagedMasterSecurityGroup.value,
-      sparkEmrManagedSlaveSecurityGroup.value,
-      sparkAdditionalMasterSecurityGroups.value,
-      sparkAdditionalSlaveSecurityGroups.value,
-      sparkS3JarFolder.value,
-      sparkS3LoggingFolder.value,
-      sparkEmrConfigs.value,
-      sparkAdditionalApplications.value
-    ),
+    sparkEmrClientBuilder := {
+      AmazonElasticMapReduceClientBuilder.standard.withRegion(sparkAwsRegion.value)
+    },
+
+    sparkJobFlowInstancesConfig := {
+      Some(new JobFlowInstancesConfig())
+        .map(c => sparkSubnetId.value.fold(c)(id => c.withEc2SubnetId(id)))
+        .map(c => sparkSecurityGroupIds.value.fold(c) { ids =>
+          c.withAdditionalMasterSecurityGroups(ids: _*).withAdditionalSlaveSecurityGroups(ids: _*)
+        })
+        .get
+        .withInstanceGroups {
+          val masterConfig = Some(new InstanceGroupConfig())
+            .map(c => sparkInstanceBidPrice.value.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
+            .get
+            .withInstanceCount(1)
+            .withInstanceRole(InstanceRoleType.MASTER)
+            .withInstanceType(sparkInstanceType.value)
+
+          val slaveCount = sparkInstanceCount.value - 1
+          val slaveConfig = Some(new InstanceGroupConfig())
+            .map(c => sparkInstanceBidPrice.value.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
+            .get
+            .withInstanceCount(slaveCount)
+            .withInstanceRole(InstanceRoleType.CORE)
+            .withInstanceType(sparkInstanceType.value)
+
+          if (slaveCount <= 0) {
+            Seq(masterConfig).asJava
+          } else {
+            Seq(masterConfig, slaveConfig).asJava
+          }
+        }
+        .withKeepJobFlowAliveWhenNoSteps(true)
+    },
+
+    sparkRunJobFlowRequest := {
+      Some(new RunJobFlowRequest())
+        .map(r => sparkEmrConfigs.value.fold(r) { emrConfigs =>
+          r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
+        })
+        .get
+        .withName(sparkClusterName.value)
+        .withApplications(new Application().withName("Spark"))
+        .withReleaseLabel(sparkEmrRelease.value)
+        .withServiceRole(sparkEmrServiceRole.value)
+        .withJobFlowRole(sparkInstanceRole.value)
+        .withInstances(sparkJobFlowInstancesConfig.value)
+    },
 
     sparkCreateCluster := {
       implicit val log = streams.value.log
-      log.debug("Starting EMR cluster with config \n " + sparkSettings.value)
-      createCluster(sparkSettings.value, None)
+      implicit val emr = sparkEmrClientBuilder.value.build()
+      findClusterWithName(sparkClusterName.value) match {
+        case Some(cluster) =>
+          sys.error(s"A cluster with name ${sparkClusterName.value} and id ${cluster.getId} already exists.")
+        case None =>
+          val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
+          log.info(s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
+      }
     },
 
     sparkSubmitJob := {
-      implicit val log = streams.value.log
-      val args = spaceDelimited("<arg>").parsed
-      val mainClassValue = (mainClass in Compile).value.getOrElse(sys.error("Can't locate the main class in your application."))
-      submitJob(sparkSettings.value, mainClassValue, args, assembly.value)
-    },
-
-    sparkSubmitJobWithMain := {
-      Def.inputTask {
+      Def.inputTaskDyn {
         implicit val log = streams.value.log
-        val (mainClass, args) = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil)).parsed
-        submitJob(sparkSettings.value, mainClass, args, assembly.value)
+        implicit val emr = sparkEmrClientBuilder.value.build()
+        val args = spaceDelimited("<arg>").parsed
+        val mainClassValue = (mainClass in Compile).value.getOrElse(sys.error("Can't locate the main class in your application."))
+        submitJob(mainClassValue, args)
       }.evaluated
     },
 
-    sparkSubmitSteps := {
-      implicit val log = streams.value.log
-      sparkEmrSteps.value match {
-        case Some(steps) => submitSteps(sparkSettings.value, steps)
-        case None => sys.error("Steps not defined for sparkSubmitSteps task.")
-      }
-    },
-
-    sparkUploadJarToS3 := {
-      implicit val log = streams.value.log
-      if (Try(uploadJarToS3(sparkSettings.value.s3JarFolder, assembly.value)).isFailure)
-        sys.error("Failed to upload application jar to S3.")
-    },
-
-    sparkTerminateCluster := {
-      val log = streams.value.log
-
-      val emr = buildEmr(sparkSettings.value)
-      val clusterIdOpt = emr
-        .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
-        .getClusters().asScala
-        .find(_.getName == sparkClusterName.value)
-        .map(_.getId)
-
-      clusterIdOpt match {
-        case None =>
-          log.info(s"The cluster with name ${sparkClusterName.value} does not exist.")
-        case Some(clusterId) =>
-          emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(clusterId))
-          log.info(s"Cluster with id $clusterId is terminating, please check aws console for the following information.")
-      }
+    sparkSubmitJobWithMain := {
+      Def.inputTaskDyn {
+        implicit val log = streams.value.log
+        implicit val emr = sparkEmrClientBuilder.value.build()
+        val (mainClass, args) = loadForParser(discoveredMainClasses in Compile)((s, names) => runMainParser(s, names getOrElse Nil)).parsed
+        submitJob(mainClass, args)
+      }.evaluated
     },
 
     sparkListClusters := {
       val log = streams.value.log
+      val emr = sparkEmrClientBuilder.value.build()
 
-      val emr = buildEmr(sparkSettings.value)
       val clusters = emr
         .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
         .getClusters().asScala
@@ -223,145 +185,60 @@ object EmrSparkPlugin extends AutoPlugin {
           log.info(s"Name: ${c.getName} | Id: ${c.getId}")
         }
       }
+    },
+
+    sparkTerminateCluster := {
+      val log = streams.value.log
+      implicit val emr = sparkEmrClientBuilder.value.build()
+
+      val clusterIdOpt = emr
+        .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+        .getClusters().asScala
+        .find(_.getName == sparkClusterName.value)
+        .map(_.getId)
+
+      findClusterWithName(sparkClusterName.value) match {
+        case None =>
+          log.info(s"The cluster with name ${sparkClusterName.value} does not exist.")
+        case Some(cluster) =>
+          emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId))
+          log.info(s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information.")
+      }
     }
   )
 
-  def createCluster(settings: Settings, stepConfig: Option[Collection[StepConfig]])(implicit log: Logger) = {
-    val emr = buildEmr(settings)
-    val clustersNames = emr
-      .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
-      .getClusters().asScala
-      .map(_.getName)
+  def submitJob(mainClass: String, args: Seq[String])(implicit log: Logger, emr: AmazonElasticMapReduce) = Def.task {
+    val jar = assembly.value
+    val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
+    log.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
+    AmazonS3ClientBuilder.defaultClient().putObject(s3Jar.bucket, s3Jar.key, jar)
 
-    if (clustersNames.exists(_ == settings.clusterName)) {
-      log.error(s"A cluster with name ${settings.clusterName} already exists.")
-    } else {
-      val request = Some(new RunJobFlowRequest())
-        .map(r => settings.s3LoggingFolder.fold(r)(folder => r.withLogUri(folder)))
-        .map(r => stepConfig.fold(r)(c => r.withSteps(c)))
-        .map(r => settings.emrAutoScalingRole.fold(r)(c => r.withAutoScalingRole(c)))
-        .map(r => settings.emrConfigs.fold(r) { emrConfigs =>
-          r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()):_*)
-        })
-        .map(r => settings.tags.fold(r)(tags => r.withTags(tags.map { case (k, v) => new Tag(k, v) }.asJavaCollection)))
-        .get
-        .withName(settings.clusterName)
-        .withApplications(("Spark" +: settings.additionalApplications.getOrElse(Seq.empty)).map(app => new Application().withName(app)): _*)
-        .withReleaseLabel(settings.emrRelease)
-        .withServiceRole(settings.emrServiceRole)
-        .withJobFlowRole(settings.instanceRole)
-        .withInstances {
-          Some(new JobFlowInstancesConfig())
-            .map(c => settings.subnetId.fold(c)(id => c.withEc2SubnetId(id)))
-            .map(c => settings.keyName.fold(c)(key => c.withEc2KeyName(key)))
-            .map(c => settings.emrManagedMasterSecurityGroup.fold(c)(c.withEmrManagedMasterSecurityGroup))
-            .map(c => settings.emrManagedSlaveSecurityGroup.fold(c)(c.withEmrManagedSlaveSecurityGroup))
-            .map(c => settings.additionalMasterSecurityGroups.fold(c)(ids => c.withAdditionalMasterSecurityGroups(ids: _*)))
-            .map(c => settings.additionalSlaveSecurityGroups.fold(c)(ids => c.withAdditionalSlaveSecurityGroups(ids: _*)))
-            .get
-            .withInstanceGroups {
-              val masterConfig = Some(new InstanceGroupConfig())
-                .map(c => settings.instanceBidPrice.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
-                .get
-                .withInstanceCount(1)
-                .withInstanceRole(InstanceRoleType.MASTER)
-                .withInstanceType(settings.instanceType)
-
-              val slaveCount = settings.instanceCount - 1
-              val slaveConfig = Some(new InstanceGroupConfig())
-                .map(c => settings.instanceBidPrice.fold(c.withMarket(MarketType.ON_DEMAND))(c.withMarket(MarketType.SPOT).withBidPrice))
-                .get
-                .withInstanceCount(slaveCount)
-                .withInstanceRole(InstanceRoleType.CORE)
-                .withInstanceType(settings.instanceType)
-
-              if (slaveCount <= 0) {
-                Seq(masterConfig).asJava
-              } else {
-                Seq(masterConfig, slaveConfig).asJava
-              }
-            }
-            .withKeepJobFlowAliveWhenNoSteps(stepConfig.isEmpty)
-        }
-      val res = emr.runJobFlow(request)
-      log.info(s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
-    }
-  }
-
-  def uploadJarToS3(s3Location: String, jarFile: File)(implicit log: Logger): S3Url = {
-    log.info(s"Uploading jar ${jarFile.getName} to S3 path $s3Location")
-    val s3 = AmazonS3ClientBuilder.defaultClient()
-    val jarUrl = new S3Url(s3Location) / jarFile.getName
-    val startTime = System.currentTimeMillis
-    s3.putObject(jarUrl.bucket, jarUrl.key, jarFile)
-    log.info(s"Jar uploaded in ${(System.currentTimeMillis - startTime) / 1000} secs")
-    jarUrl
-  }
-
-  def getClusterId(settings: Settings): Option[String] = {
-    buildEmr(settings)
-      .listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
-      .getClusters().asScala
-      .find(_.getName == settings.clusterName)
-      .map(_.getId)
-  }
-
-  def submitJob(
-    settings: Settings,
-    mainClass: String,
-    args: Seq[String],
-    jar: File
-  )(implicit log: Logger) = {
-
-    val s3Location = settings.s3JarFolder
-    val uploadedAt = uploadJarToS3(s3Location, jar)
-    val clusterIdOpt = getClusterId(settings)
-    val emr = buildEmr(settings)
-    //submit job
-    val stepConfig = new StepConfig()
+    val step = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
       .withName("Spark Step")
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, uploadedAt.toString) ++ args).asJava)
+          .withArgs((Seq("spark-submit", "--deploy-mode", "cluster", "--class", mainClass, s3Jar.toString) ++ args).asJava)
       )
-    clusterIdOpt match {
-      case Some(clusterId) =>
-        val res = emr.addJobFlowSteps(
-          new AddJobFlowStepsRequest()
-            .withJobFlowId(clusterId)
-            .withSteps(stepConfig)
-        )
-        log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
+
+    findClusterWithName(sparkClusterName.value) match {
+      case Some(cluster) =>
+        emr.addJobFlowSteps(new AddJobFlowStepsRequest().withJobFlowId(cluster.getId).withSteps(step))
+        log.info(s"Your job is added to the cluster with id ${cluster.getId}, you may check its status on AWS console.")
       case None =>
-        createCluster(settings, Some(List(stepConfig).asJava))
+        val jobFlowRequest = sparkRunJobFlowRequest.value
+          .withSteps((sparkRunJobFlowRequest.value.getSteps.asScala :+ step): _*)
+          .withInstances(sparkJobFlowInstancesConfig.value.withKeepJobFlowAliveWhenNoSteps(false))
+        val res = emr.runJobFlow(jobFlowRequest)
+        log.info(s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
     }
   }
 
-  def submitSteps(
-    settings: Settings,
-    steps: Seq[StepConfig]
-  )(implicit log: Logger) = {
-
-    getClusterId(settings) match {
-      case Some(clusterId) =>
-        val res = buildEmr(settings).addJobFlowSteps(
-          new AddJobFlowStepsRequest()
-            .withJobFlowId(clusterId)
-            .withSteps(steps.asJavaCollection)
-        )
-        log.info(s"Job submitted with job id ${res.getStepIds.asScala.mkString(",")}")
-      case None =>
-        log.warn("Couldn't find cluster. Will create one before submitting")
-        createCluster(settings, Some(steps.asJavaCollection))
-    }
-  }
-
-  def buildEmr(settings: Settings) = {
-    AmazonElasticMapReduceClientBuilder.standard()
-      .withRegion(settings.awsRegion)
-      .build()
+  def findClusterWithName(name: String)(implicit emr: AmazonElasticMapReduce) = {
+    emr.listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
+      .getClusters().asScala
+      .find(_.getName == name)
   }
 
   class S3Url(url: String) {
