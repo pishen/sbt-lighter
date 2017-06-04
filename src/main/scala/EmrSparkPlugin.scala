@@ -59,6 +59,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
     //underlying configs
     val sparkEmrClientBuilder = settingKey[AmazonElasticMapReduceClientBuilder]("default EMR client builder")
+    val sparkS3ClientBuilder = settingKey[AmazonS3ClientBuilder]("default S3 client builder")
     val sparkJobFlowInstancesConfig = settingKey[JobFlowInstancesConfig]("default JobFlowInstancesConfig")
     val sparkRunJobFlowRequest = settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
 
@@ -90,6 +91,10 @@ object EmrSparkPlugin extends AutoPlugin {
 
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard.withRegion(sparkAwsRegion.value)
+    },
+
+    sparkS3ClientBuilder := {
+      AmazonS3ClientBuilder.standard.withRegion(sparkAwsRegion.value)
     },
 
     sparkJobFlowInstancesConfig := {
@@ -211,7 +216,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val jar = assembly.value
     val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
     log.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
-    AmazonS3ClientBuilder.defaultClient().putObject(s3Jar.bucket, s3Jar.key, jar)
+    sparkS3ClientBuilder.value.build().putObject(s3Jar.bucket, s3Jar.key, jar)
 
     val step = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)

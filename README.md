@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.8.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.8.1")
   ```
 
 2. Prepare your `build.sbt`
