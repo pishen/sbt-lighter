@@ -133,19 +133,19 @@ sparkEmrConfigs := Some(Seq(EmrConfig("spark", Map("maximizeResourceAllocation" 
 
 There are two settings called `sparkJobFlowInstancesConfig` and `sparkRunJobFlowRequest`, which corresponds to [JobFlowInstancesConfig](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/JobFlowInstancesConfig.html) and [RunJobFlowRequest](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/RunJobFlowRequest.html) in AWS Java SDK. Some default values are already configured in these settings, but you can modify it for your own purpose, for example:
 
-To set the S3 logging folder for EMR cluster:
+#### To set the S3 logging folder for EMR cluster:
 
 ``` scala
 sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withLogUri("s3://aws-logs-xxxxxxxxxxxx-ap-northeast-1/elasticmapreduce/")
 ```
 
-To set the EC2 keypair for each instances:
+#### To set the EC2 keypair for each instances:
 
 ``` scala
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("your-keypair")
 ```
 
-To set the master and slave security groups separately (This requires you leaving `sparkSecurityGroupIds` as `None` in step 2):
+#### To set the master and slave security groups separately (This requires you leaving `sparkSecurityGroupIds` as `None` in step 2):
 
 ``` scala
 sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
@@ -153,13 +153,13 @@ sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
   .withAdditionalSlaveSecurityGroups("sg-yyyyyyyy")
 ```
 
-To set the EMR auto-scaling role:
+#### To set the EMR auto-scaling role:
 
 ``` scala
 sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withAutoScalingRole("EMR_AutoScaling_DefaultRole")
 ```
 
-To add EMR applications other than Spark:
+#### To add EMR applications other than Spark:
 
 ``` scala
 import com.amazonaws.services.elasticmapreduce.model.Application
@@ -168,7 +168,7 @@ sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
   .withApplications(Seq("Spark", "Presto", "Flink").map(a => new Application().withName(a)):_*)
 ```
 
-To set the tags on cluster resources:
+#### To set the tags on cluster resources:
 
 ``` scala
 import com.amazonaws.services.elasticmapreduce.model.Tag
@@ -176,7 +176,7 @@ import com.amazonaws.services.elasticmapreduce.model.Tag
 sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withTags(new Tag("Name", "my-cluster-name"))
 ```
 
-To add some initial steps at cluster creation:
+#### To add some initial steps at cluster creation:
 
 ``` scala
 import com.amazonaws.services.elasticmapreduce.model._
