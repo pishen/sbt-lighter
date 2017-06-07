@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.8.1")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.9.0")
   ```
 
 2. Prepare your `build.sbt`
@@ -192,4 +192,43 @@ sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
           .withArgs(Seq("arg1", "arg2").asJava)
       )
   )
+```
+
+## Use configurations to provide multiple setting combinations
+
+If you have multiple environments (e.g. different subnet, different AWS region, ...etc) for your Spark project, you can use SBT's configurations to provide multiple setting combinations:
+
+``` scala
+import sbtemrspark.EmrSparkPlugin
+import sbtemrspark.EmrConfig
+
+lazy val Testing = config("testing")
+lazy val Production = config("production")
+
+inConfig(Testing)(EmrSparkPlugin.baseSettings ++ Seq(
+  sparkAwsRegion := "ap-northeast-1",
+  sparkSubnetId := Some("subnet-xxxxxxxx"),
+  sparkSecurityGroupIds := Some(Seq("sg-xxxxxxxx")),
+  sparkInstanceCount := 1,
+  sparkS3JarFolder := "s3://my-testing-bucket/my-emr-folder/"
+))
+
+inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
+  sparkAwsRegion := "us-west-2",
+  sparkSubnetId := Some("subnet-yyyyyyyy"),
+  sparkSecurityGroupIds := Some(Seq("sg-yyyyyyyy")),
+  sparkInstanceCount := 20,
+  sparkS3JarFolder := "s3://my-production-bucket/my-emr-folder/",
+  sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withLogUri("s3://aws-logs-xxxxxxxxxxxx-us-west-2/elasticmapreduce/"),
+  sparkInstanceBidPrice := Some("0.39"),
+  sparkEmrConfigs := Some(Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true"))))
+))
+```
+
+Then, in sbt, you can activate different configuration by the `<configuration>:<task/setting>` syntax:
+
+```
+> testing:sparkSubmitJob
+
+> production:sparkSubmitJob
 ```
