@@ -194,9 +194,9 @@ sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
   )
 ```
 
-## Use configurations to provide multiple setting combinations
+## Use SBT's config to provide multiple setting combinations
 
-If you have multiple environments (e.g. different subnet, different AWS region, ...etc) for your Spark project, you can use SBT's configurations to provide multiple setting combinations:
+If you have multiple environments (e.g. different subnet, different AWS region, ...etc) for your Spark project, you can use SBT's config to provide multiple setting combinations:
 
 ``` scala
 import sbtemrspark.EmrSparkPlugin
@@ -225,7 +225,7 @@ inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
 ))
 ```
 
-Then, in sbt, you can activate different configuration by the `<configuration>:<task/setting>` syntax:
+Then, in sbt, you can activate different config by the `<config>:<task/setting>` syntax:
 
 ```
 > testing:sparkSubmitJob
