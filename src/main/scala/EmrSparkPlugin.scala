@@ -77,8 +77,11 @@ object EmrSparkPlugin extends AutoPlugin {
 
   val activatedClusterStates = Seq(ClusterState.RUNNING, ClusterState.STARTING, ClusterState.WAITING, ClusterState.BOOTSTRAPPING)
 
-  override lazy val projectSettings = Seq(
+  override lazy val projectSettings = baseSettings
+
+  lazy val baseSettings = Seq(
     sparkClusterName := name.value,
+    sparkAwsRegion := "us-west-2",
     sparkEmrRelease := "emr-5.5.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := None,
@@ -88,6 +91,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkS3JarFolder := "changeme",
 
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard.withRegion(sparkAwsRegion.value)
@@ -247,7 +251,10 @@ object EmrSparkPlugin extends AutoPlugin {
   }
 
   class S3Url(url: String) {
-    require(url.startsWith("s3://"), "S3 url should starts with \"s3://\".")
+    require(
+      url.startsWith("s3://"),
+      "S3 url should start with \"s3://\". Did you forget to set the sparkS3JarFolder key?"
+    )
 
     val (bucket, key) = url.drop(5).split("/").toList match {
       case head :: Nil => (head, "")
