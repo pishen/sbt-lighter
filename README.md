@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.9.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.10.0")
   ```
 
 2. Prepare your `build.sbt`
@@ -232,3 +232,27 @@ Then, in sbt, you can activate different config by the `<config>:<task/setting>`
 
 > production:sparkSubmitJob
 ```
+
+## Keep SBT monitoring the cluster status until it completes
+
+There's a special command called
+
+```
+> sparkMonitor
+```
+
+which will poll on the cluster's status until it terminates or exceeds the time limit.
+
+The time limit can be defined by:
+
+```scala
+import scala.concurrent.duration._
+
+sparkTimeoutDuration := 90.minutes
+```
+
+And this command will fall into one of the three following behaviors:
+
+1. If the cluster ran for a duration longer than `sparkTimeoutDuration`, terminate it and throw an exception.
+2. If the cluster terminated within `sparkTimeoutDuration` but had some failed steps, throw an exception.
+3. If the cluster terminated without any failed step, return Unit (exit code == 0).

@@ -27,6 +27,7 @@ import sbt.Keys._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
+import scala.concurrent.duration._
 
 case class EmrConfig(
   classification: String,
@@ -56,6 +57,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkInstanceBidPrice = settingKey[Option[String]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
     val sparkS3JarFolder = settingKey[String]("S3 folder for putting the executable jar")
+    val sparkTimeoutDuration = settingKey[Duration]("timeout duration for sparkTimeout")
 
     //underlying configs
     val sparkEmrClientBuilder = settingKey[AmazonElasticMapReduceClientBuilder]("default EMR client builder")
@@ -69,6 +71,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
     val sparkSubmitJob = inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain = inputKey[Unit]("submit the job with specified main class")
+    val sparkMonitor = taskKey[Unit]("monitor and terminate the cluster when timeout")
   }
   import autoImport._
 
@@ -92,6 +95,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkS3JarFolder := "changeme",
+    sparkTimeoutDuration := 90.minutes,
 
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard.withRegion(sparkAwsRegion.value)
@@ -212,6 +216,45 @@ object EmrSparkPlugin extends AutoPlugin {
         case Some(cluster) =>
           emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId))
           log.info(s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information.")
+      }
+    },
+
+    sparkMonitor := {
+      val log = streams.value.log
+      implicit val emr = sparkEmrClientBuilder.value.build()
+
+      findClusterWithName(sparkClusterName.value) match {
+        case None =>
+          log.info(s"The cluster with name ${sparkClusterName.value} does not exist.")
+        case Some(cluster) =>
+          log.info(s"Found cluster ${cluster.getId}, start monitoring.")
+          val timeoutTime = System.currentTimeMillis() + sparkTimeoutDuration.value.toMillis
+          def checkStatus(): Unit = {
+            print(".")
+            val updatedCluster = emr.describeCluster(new DescribeClusterRequest().withClusterId(cluster.getId)).getCluster
+            val state = updatedCluster.getStatus.getState
+            if (System.currentTimeMillis() >= timeoutTime && activatedClusterStates.map(_.toString).contains(state)) {
+              emr.terminateJobFlows(new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId))
+              println()
+              sys.error("Timeout. Cluster terminated.")
+            } else if (!activatedClusterStates.map(_.toString).contains(state)) {
+              val hasAbnormalStep = emr.listSteps(new ListStepsRequest().withClusterId(cluster.getId))
+                .getSteps.asScala
+                .map(_.getStatus.getState)
+                .exists(_ != StepState.COMPLETED.toString)
+              if (hasAbnormalStep) {
+                println()
+                sys.error("Cluster terminated with abnormal step.")
+              } else {
+                println()
+                log.info("Cluster terminated without error.")
+              }
+            } else {
+              Thread.sleep(5000)
+              checkStatus()
+            }
+          }
+          checkStatus()
       }
     }
   )
