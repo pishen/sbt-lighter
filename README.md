@@ -225,7 +225,7 @@ inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
 ))
 ```
 
-Then, in sbt, you can activate different config by the `<config>:<task/setting>` syntax:
+Then, in sbt, activate different config by the `<config>:<task/setting>` syntax:
 
 ```
 > testing:sparkSubmitJob
@@ -250,9 +250,18 @@ import scala.concurrent.duration._
 
 sparkTimeoutDuration := 90.minutes
 ```
+(the default value of `sparkTimeoutDuration` is 90 minutes)
 
 And this command will fall into one of the three following behaviors:
 
-1. If the cluster ran for a duration longer than `sparkTimeoutDuration`, terminate it and throw an exception.
+1. If the cluster ran for a duration longer than `sparkTimeoutDuration`, terminate the cluster and throw an exception.
 2. If the cluster terminated within `sparkTimeoutDuration` but had some failed steps, throw an exception.
 3. If the cluster terminated without any failed step, return Unit (exit code == 0).
+
+This command would be useful if you want to trigger some notifications. For example, a bash command like this
+
+```
+$ sbt 'sparkSubmitJob arg0 arg1' sparkMonitor
+```
+
+will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong.
