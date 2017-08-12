@@ -12,7 +12,13 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.10.0")
   ```
 
-2. Prepare your `build.sbt`
+2. Setup sbt version for your project in `project/build.properties` (sbt-emr-spark haven't support SBT 1.0 yet):
+
+  ```
+  sbt.version=0.13.16
+  ```
+
+3. Prepare your `build.sbt`
 
   ```scala
   name := "sbt-emr-spark-test"
@@ -38,7 +44,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   sparkInstanceCount := 2
   ```
 
-3. Write your application at `src/main/scala/mypackage/Main.scala`
+4. Write your application at `src/main/scala/mypackage/Main.scala`
 
   ```scala
   package mypackage
@@ -61,7 +67,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   }
   ```
 
-4. Submit your Spark application
+5. Submit your Spark application
 
   ```
   > sparkSubmitJob arg0 arg1 ...
