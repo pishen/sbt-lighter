@@ -87,7 +87,7 @@ object EmrSparkPlugin extends AutoPlugin {
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
     sparkAwsRegion := "us-west-2",
-    sparkEmrRelease := "emr-5.5.0",
+    sparkEmrRelease := "emr-5.8.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := None,
     sparkSubnetId := None,
