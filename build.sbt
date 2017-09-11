@@ -15,11 +15,12 @@ libraryDependencies ++= Seq(
   "org.slf4s" %% "slf4s-api" % "1.7.12"
 )
 
-enablePlugins(AutomateHeaderPlugin)
-
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.4")
 
 publishMavenStyle := false
 organization := "net.pishen"
+
+enablePlugins(AutomateHeaderPlugin)
+organizationName := "Pishen Tsai"
 startYear := Some(2017)
 licenses += ("Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.html"))
