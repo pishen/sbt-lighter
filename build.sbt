@@ -6,7 +6,7 @@ scalaVersion := "2.10.6"
 
 sbtPlugin := true
 
-val awsVersion = "1.11.134"
+val awsVersion = "1.11.195"
 val circeVersion = "0.8.0"
 
 libraryDependencies ++= Seq(
