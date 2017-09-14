@@ -9,7 +9,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.10.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.11.0")
   ```
 
 2. Setup sbt version for your project in `project/build.properties` (sbt-emr-spark haven't support SBT 1.0 yet):
@@ -26,7 +26,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   scalaVersion := "2.11.11"
 
   libraryDependencies ++= Seq(
-    "org.apache.spark" %% "spark-core" % "2.1.1" % "provided"
+    "org.apache.spark" %% "spark-core" % "2.2.0" % "provided"
   )
 
   sparkAwsRegion := "ap-northeast-1"
@@ -86,7 +86,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 //Your cluster's name. Default value is copied from your project's `name` setting.
 sparkClusterName := "your-new-cluster-name"
 
-sparkEmrRelease := "emr-5.5.0"
+sparkEmrRelease := "emr-5.8.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
 
@@ -132,7 +132,24 @@ Instead of using this JSON config, one can add the following setting in `build.s
 ``` scala
 import sbtemrspark.EmrConfig
 
-sparkEmrConfigs := Some(Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true"))))
+sparkEmrConfigs := Some(
+  Seq(
+    EmrConfig("spark").withProperties("maximizeResourceAllocation" -> "true")
+  )
+)
+```
+
+For people who already have a JSON config, there's a parsing function `EmrConfig.parseJson(jsonString: String)` which can convert the JSON array into `List[EmrConfig]`. And, if your JSON is located on S3, you can also parse the file on S3 directly (note that this will read the file from S3 right after you execute sbt):
+
+``` scala
+import sbtemrspark.EmrConfig
+
+sparkEmrConfigs := Some(
+  EmrConfig
+    .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3ClientBuilder.value)
+    .right
+    .get
+)
 ```
 
 ## Modify the configurations of underlying AWS objects
