@@ -19,7 +19,7 @@ package sbtemrspark
 import scala.collection.JavaConverters._
 
 import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
-import com.amazonaws.services.elasticmapreduce.model.{Unit => _, Configuration => AwsEmrConfig, _}
+import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import sbinary.DefaultProtocol.StringFormat
 import sbt._
@@ -30,19 +30,6 @@ import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
 import scala.concurrent.duration._
-
-case class EmrConfig(
-  classification: String,
-  properties: Map[String, String] = Map.empty,
-  emrConfigs: Seq[EmrConfig] = Seq.empty
-) {
-  def toAwsEmrConfig(): AwsEmrConfig = {
-    new AwsEmrConfig()
-      .withClassification(classification)
-      .withProperties(properties.asJava)
-      .withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
-  }
-}
 
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
@@ -293,25 +280,5 @@ object EmrSparkPlugin extends AutoPlugin {
     emr.listClusters(new ListClustersRequest().withClusterStates(activatedClusterStates: _*))
       .getClusters().asScala
       .find(_.getName == name)
-  }
-
-  class S3Url(url: String) {
-    require(
-      url.startsWith("s3://"),
-      "S3 url should start with \"s3://\". Did you forget to set the sparkS3JarFolder key?"
-    )
-
-    val (bucket, key) = url.drop(5).split("/").toList match {
-      case head :: Nil => (head, "")
-      case head :: tail => (head, tail.mkString("/"))
-      case _ => sys.error(s"unrecognized s3 url: $url")
-    }
-
-    def /(subPath: String) = {
-      val newKey = if (key == "") subPath else key + "/" + subPath
-      new S3Url(s"s3://$bucket/$newKey")
-    }
-
-    override def toString = s"s3://$bucket/$key"
   }
 }
