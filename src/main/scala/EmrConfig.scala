@@ -25,9 +25,9 @@ import io.circe.generic.auto._
 import io.circe.parser._
 
 case class EmrConfig(
-  Classification: String,
-  Properties: Option[Map[String, String]],
-  Configurations: Option[Seq[EmrConfig]]
+    Classification: String,
+    Properties: Option[Map[String, String]],
+    Configurations: Option[Seq[EmrConfig]]
 ) {
   def withProperties(props: (String, String)*) = {
     this.copy(Properties = Some(props.toMap))
@@ -39,19 +39,33 @@ case class EmrConfig(
 
   def toAwsEmrConfig(): Configuration = {
     Some(new Configuration().withClassification(Classification))
-      .map(c => Properties.map(props => c.withProperties(props.asJava)).getOrElse(c))
-      .map(c => Configurations.map(configs => c.withConfigurations(configs.map(_.toAwsEmrConfig): _*)).getOrElse(c))
+      .map { c =>
+        Properties.map(props => c.withProperties(props.asJava)).getOrElse(c)
+      }
+      .map { c =>
+        Configurations
+          .map { configs =>
+            c.withConfigurations(configs.map(_.toAwsEmrConfig): _*)
+          }
+          .getOrElse(c)
+      }
       .get
   }
 }
 
 object EmrConfig {
-  def apply(classification: String): EmrConfig = EmrConfig(classification, None, None)
+  def apply(classification: String): EmrConfig =
+    EmrConfig(classification, None, None)
+
   def parseJson(jsonString: String) = decode[List[EmrConfig]](jsonString)
-  def parseJsonFromS3(s3Url: String)(implicit s3ClientBuilder: AmazonS3ClientBuilder) = {
-    val s3 = s3ClientBuilder.build()
+  def parseJsonFromS3(s3Url: String)(
+      implicit s3ClientBuilder: AmazonS3ClientBuilder) = {
     val s3JsonUrl = new S3Url(s3Url)
-    val jsonString = Source.fromInputStream(s3.getObject(s3JsonUrl.bucket, s3JsonUrl.key).getObjectContent).mkString
+    val s3JsonInputStream = s3ClientBuilder
+      .build()
+      .getObject(s3JsonUrl.bucket, s3JsonUrl.key)
+      .getObjectContent
+    val jsonString = Source.fromInputStream(s3JsonInputStream).mkString
     parseJson(jsonString)
   }
 }
