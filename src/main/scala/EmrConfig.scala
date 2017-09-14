@@ -16,12 +16,13 @@
 
 package sbtemrspark
 
+import scala.collection.JavaConverters._
+import scala.io.Source
+
 import com.amazonaws.services.elasticmapreduce.model.Configuration
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import io.circe.generic.auto._
 import io.circe.parser._
-import scala.collection.JavaConverters._
-import scala.io.Source
 
 case class EmrConfig(
   Classification: String,

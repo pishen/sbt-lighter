@@ -17,6 +17,7 @@
 package sbtemrspark
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
 import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
@@ -29,7 +30,6 @@ import sbt.Keys._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
-import scala.concurrent.duration._
 
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
