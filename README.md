@@ -217,7 +217,7 @@ sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
   )
 ```
 
-### To add Server Side Encryption to Jar File and Add meta data support
+#### To add Server Side Encryption to Jar File and Add meta data support:
 
 ``` scala
 import com.amazonaws.services.s3.model.ObjectMetadata
