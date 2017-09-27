@@ -313,7 +313,7 @@ object EmrSparkPlugin extends AutoPlugin {
       val objectMetadata = new ObjectMetadata
       objectMetadata.setSSEAlgorithm(ObjectMetadata.AES_256_SERVER_SIDE_ENCRYPTION)
       val putRequest = new PutObjectRequest(s3Jar.bucket, s3Jar.key, jar)
-      sparkS3ClientBuilder.value.build().putObject(putRequest)
+      sparkS3ClientBuilder.value.build().putObject(putRequest.withMetadata(objectMetadata))
     }
 
     val step = new StepConfig()
