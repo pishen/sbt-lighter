@@ -16,23 +16,21 @@
 
 package sbtemrspark
 
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
-
-import com.amazonaws.services.elasticmapreduce.{
-  AmazonElasticMapReduce,
-  AmazonElasticMapReduceClientBuilder
-}
 import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
+import com.amazonaws.services.elasticmapreduce.{AmazonElasticMapReduce, AmazonElasticMapReduceClientBuilder}
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import com.amazonaws.services.s3.model.PutObjectRequest
 import sbinary.DefaultProtocol.StringFormat
-import sbt._
 import sbt.Cache.seqFormat
 import sbt.Defaults.runMainParser
 import sbt.Keys._
+import sbt._
 import sbt.complete.DefaultParsers._
 import sbtassembly.AssemblyKeys._
 import sbtassembly.AssemblyPlugin
+
+import scala.collection.JavaConverters._
+import scala.concurrent.duration._
 
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
@@ -66,6 +64,7 @@ object EmrSparkPlugin extends AutoPlugin {
       settingKey[JobFlowInstancesConfig]("default JobFlowInstancesConfig")
     val sparkRunJobFlowRequest =
       settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
+    val sparkS3PutObjectDecorator = settingKey[PutObjectRequest => PutObjectRequest]("Allow user to set metadata with put request.Like server side encryption")
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -105,6 +104,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkS3JarFolder := "changeme",
     sparkTimeoutDuration := 90.minutes,
+    sparkS3PutObjectDecorator := {(req:PutObjectRequest) => req},
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
@@ -307,7 +307,9 @@ object EmrSparkPlugin extends AutoPlugin {
     val jar = assembly.value
     val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
     log.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
-    sparkS3ClientBuilder.value.build().putObject(s3Jar.bucket, s3Jar.key, jar)
+
+    val putRequest = sparkS3PutObjectDecorator.value(new PutObjectRequest(s3Jar.bucket, s3Jar.key, jar))
+    sparkS3ClientBuilder.value.build().putObject(putRequest)
 
     val step = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
