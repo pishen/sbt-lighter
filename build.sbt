@@ -12,6 +12,7 @@ val circeVersion = "0.8.0"
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % awsVersion,
   "com.amazonaws" % "aws-java-sdk-s3" % awsVersion,
+  "com.amazonaws" % "aws-java-sdk-sts" % awsVersion,
   "com.github.eirslett" %% "sbt-slf4j" % "0.1",
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
