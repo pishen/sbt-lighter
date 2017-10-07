@@ -9,14 +9,16 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.12.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.13.0")
   ```
 
-2. Setup sbt version for your project in `project/build.properties` (sbt-emr-spark haven't support SBT 1.0 yet):
+2. Setup sbt version for your project in `project/build.properties`:
 
   ```
-  sbt.version=0.13.16
+  sbt.version=1.0.2
   ```
+
+  (Since version 0.13.0, sbt-emr-spark requires sbt 1.0)
 
 3. Prepare your `build.sbt`
 
@@ -171,7 +173,7 @@ sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName(
 #### To set the master and slave security groups separately (This requires you leaving `sparkSecurityGroupIds` as `None` in step 2):
 
 ``` scala
-sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
+sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value
   .withAdditionalMasterSecurityGroups("sg-xxxxxxxx")
   .withAdditionalSlaveSecurityGroups("sg-yyyyyyyy")
 ```
@@ -298,4 +300,4 @@ This command would be useful if you want to trigger some notifications. For exam
 $ sbt 'sparkSubmitJob arg0 arg1' sparkMonitor
 ```
 
-will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong. 
+will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong.
