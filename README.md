@@ -298,4 +298,4 @@ This command would be useful if you want to trigger some notifications. For exam
 $ sbt 'sparkSubmitJob arg0 arg1' sparkMonitor
 ```
 
-will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong.
+will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong. 
