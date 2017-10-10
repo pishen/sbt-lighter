@@ -25,5 +25,6 @@ organization := "net.pishen"
 enablePlugins(AutomateHeaderPlugin)
 organizationName := "Pishen Tsai"
 startYear := Some(2017)
-licenses += ("Apache-2.0" -> url(
-  "https://www.apache.org/licenses/LICENSE-2.0.html"))
+licenses += (
+  "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0.html")
+)
