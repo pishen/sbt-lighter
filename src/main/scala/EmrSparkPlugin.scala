@@ -69,6 +69,7 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3PutObjectDecorator =
       settingKey[PutObjectRequest => PutObjectRequest](
         "Allow user to set metadata with put request.Like server side encryption")
+    val sparkSubmitConfs = settingKey[Map[String, String]] ("Allow user to set spark submit conf")
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -111,6 +112,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkS3PutObjectDecorator := { (req: PutObjectRequest) =>
       req
     },
+    sparkSubmitConfs := Map.empty[String, String],
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
@@ -199,7 +201,7 @@ object EmrSparkPlugin extends AutoPlugin {
         val args = spaceDelimited("<arg>").parsed
         val mainClassValue = (mainClass in Compile).value.getOrElse(
           sys.error("Can't locate the main class in your application."))
-        submitJob(mainClassValue, args)
+        submitJob(mainClassValue, args,sparkSubmitConfs.value)
       }.evaluated
     },
     sparkSubmitJobWithMain := {
@@ -210,7 +212,7 @@ object EmrSparkPlugin extends AutoPlugin {
           loadForParser(discoveredMainClasses in Compile) { (s, names) =>
             runMainParser(s, names getOrElse Nil)
           }.parsed
-        submitJob(mainClass, args)
+        submitJob(mainClass, args,sparkSubmitConfs.value)
       }.evaluated
     },
     sparkListClusters := {
@@ -307,7 +309,7 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   )
 
-  def submitJob(mainClass: String, args: Seq[String])(
+  def submitJob(mainClass: String, args: Seq[String], sparkConfs: Map[String, String])(
       implicit log: Logger,
       emr: AmazonElasticMapReduce) = Def.task {
     val jar = assembly.value
@@ -319,21 +321,23 @@ object EmrSparkPlugin extends AutoPlugin {
     )
     sparkS3ClientBuilder.value.build().putObject(putRequest)
 
+    val sparkSubmitArgs = Seq(
+      "spark-submit",
+      "--deploy-mode",
+      "cluster",
+      "--class",
+      mainClass
+    ) ++ sparkConfs.toSeq.flatMap {
+      case (k, v) => Seq("--conf", k + "=" + v)
+    } ++ (s3Jar.toString +: args)
+
     val step = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
       .withName("Spark Step")
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
-          .withArgs(
-            Seq(
-              "spark-submit",
-              "--deploy-mode",
-              "cluster",
-              "--class",
-              mainClass,
-              s3Jar.toString
-            ).++(args).asJava)
+          .withArgs(sparkSubmitArgs.asJava)
       )
 
     findClusterWithName(sparkClusterName.value) match {
