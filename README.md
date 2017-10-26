@@ -100,6 +100,9 @@ sparkInstanceType := "m3.xlarge"
 sparkInstanceBidPrice := Some("0.38")
 
 sparkInstanceRole := "EMR_EC2_DefaultRole"
+
+//Optional Spark submit configurations
+sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
 ```
 
 ## Other available commands
