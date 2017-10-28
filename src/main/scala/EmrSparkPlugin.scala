@@ -69,7 +69,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkS3PutObjectDecorator =
       settingKey[PutObjectRequest => PutObjectRequest](
         "Allow user to set metadata with put request.Like server side encryption")
-    val sparkSubmitConfs = settingKey[Map[String, String]] ("Allow user to set spark submit conf")
+    val sparkSubmitConfs =
+      settingKey[Map[String, String]]("Allow user to set spark submit conf")
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -98,7 +99,7 @@ object EmrSparkPlugin extends AutoPlugin {
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
     sparkAwsRegion := "us-west-2",
-    sparkEmrRelease := "emr-5.8.0",
+    sparkEmrRelease := "emr-5.9.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := None,
     sparkSubnetId := None,
@@ -201,7 +202,7 @@ object EmrSparkPlugin extends AutoPlugin {
         val args = spaceDelimited("<arg>").parsed
         val mainClassValue = (mainClass in Compile).value.getOrElse(
           sys.error("Can't locate the main class in your application."))
-        submitJob(mainClassValue, args,sparkSubmitConfs.value)
+        submitJob(mainClassValue, args, sparkSubmitConfs.value)
       }.evaluated
     },
     sparkSubmitJobWithMain := {
@@ -212,7 +213,7 @@ object EmrSparkPlugin extends AutoPlugin {
           loadForParser(discoveredMainClasses in Compile) { (s, names) =>
             runMainParser(s, names getOrElse Nil)
           }.parsed
-        submitJob(mainClass, args,sparkSubmitConfs.value)
+        submitJob(mainClass, args, sparkSubmitConfs.value)
       }.evaluated
     },
     sparkListClusters := {
@@ -309,9 +310,11 @@ object EmrSparkPlugin extends AutoPlugin {
     }
   )
 
-  def submitJob(mainClass: String, args: Seq[String], sparkConfs: Map[String, String])(
-      implicit log: Logger,
-      emr: AmazonElasticMapReduce) = Def.task {
+  def submitJob(
+      mainClass: String,
+      args: Seq[String],
+      sparkConfs: Map[String, String]
+  )(implicit log: Logger, emr: AmazonElasticMapReduce) = Def.task {
     val jar = assembly.value
     val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
     log.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")

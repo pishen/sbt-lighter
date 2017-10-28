@@ -1,12 +1,12 @@
 name := "sbt-emr-spark"
 
-version := "0.13.0"
+version := "0.14.0"
 
-scalaVersion := "2.12.3"
+scalaVersion := "2.12.4"
 
 sbtPlugin := true
 
-val awsVersion = "1.11.195"
+val awsVersion = "1.11.221"
 val circeVersion = "0.8.0"
 
 libraryDependencies ++= Seq(
