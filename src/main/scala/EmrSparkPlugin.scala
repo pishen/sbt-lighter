@@ -43,6 +43,8 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkEmrServiceRole = settingKey[String]("emr's service role")
     val sparkEmrConfigs =
       settingKey[Option[Seq[EmrConfig]]]("EMR configurations")
+    val sparkEmrBootstrapActionConfigs =
+      settingKey[Option[Seq[EmrBootstrapActionConfig]]]("Bootstrap Action configurations")
     val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
     val sparkSecurityGroupIds = settingKey[Option[Seq[String]]](
       "additional security group ids for both master and slave ec2 instances")
@@ -102,6 +104,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkEmrRelease := "emr-5.9.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := None,
+    sparkEmrBootstrapActionConfigs := None,
     sparkSubnetId := None,
     sparkSecurityGroupIds := None,
     sparkInstanceCount := 1,
@@ -172,6 +175,11 @@ object EmrSparkPlugin extends AutoPlugin {
         .map { r =>
           sparkEmrConfigs.value.fold(r) { emrConfigs =>
             r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
+          }
+        }
+        .map { r =>
+          sparkEmrBootstrapActionConfigs.value.fold(r) { emrBootstrapConfigs =>
+            r.withBootstrapActions(emrBootstrapConfigs.map(_.toAwsBootstrapActionConfig()): _*)
           }
         }
         .get
