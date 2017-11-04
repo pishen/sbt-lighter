@@ -71,6 +71,8 @@ object EmrSparkPlugin extends AutoPlugin {
         "Allow user to set metadata with put request.Like server side encryption")
     val sparkSubmitConfs =
       settingKey[Map[String, String]]("Allow user to set spark submit conf")
+    val ec2KeyName =
+      settingKey[Option[String]]("Allow user to specify ec2KeyName")
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -114,6 +116,7 @@ object EmrSparkPlugin extends AutoPlugin {
       req
     },
     sparkSubmitConfs := Map.empty[String, String],
+    ec2KeyName := None,
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
@@ -124,6 +127,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkJobFlowInstancesConfig := {
       Some(new JobFlowInstancesConfig())
         .map(c => sparkSubnetId.value.fold(c)(id => c.withEc2SubnetId(id)))
+        .map(c => ec2KeyName.value.fold(c)(id => c.withEc2KeyName(id)))
         .map { c =>
           sparkSecurityGroupIds.value.fold(c) { ids =>
             c.withAdditionalMasterSecurityGroups(ids: _*)
