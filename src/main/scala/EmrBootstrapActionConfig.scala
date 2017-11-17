@@ -16,16 +16,17 @@
 
 package sbtemrspark
 
+import scala.collection.JavaConverters._
+import scala.io.Source
+
 import com.amazonaws.services.elasticmapreduce.model.{
   BootstrapActionConfig,
   ScriptBootstrapActionConfig
 }
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
-import io.circe.parser.decode
-import sbtemrspark.S3Url
 
-import scala.collection.JavaConverters._
-import scala.io.Source
+import io.circe.generic.auto._
+import io.circe.parser._
 
 case class EmrBootstrapActionConfig(
     Name: String,
