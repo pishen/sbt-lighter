@@ -159,6 +159,47 @@ sparkEmrConfigs := Some(
 )
 ```
 
+## Use EmrBootstrapActionConfig to specify bootstrap actions
+
+EMR provides a JSON syntax to [configure the bootstrap actions](http://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-bootstrap.html) on cluster.Here we provide a helper class called `EmrBootstrapActionConfig`, which lets you setup the configuration in an easier way.
+
+For example, to maximize the memory allocation for each Spark job, one can use the following JSON config:
+
+``` javascript
+[
+   {
+      "Path" : "s3://mybucket/pip_install_boot.sh",
+      "Name" : "Install python packages",
+      "Args" : ["numpy","nltk"]
+   }
+]
+```
+
+Instead of using this JSON config, one can add the following setting in `build.sbt` to achieve the same effect:
+
+``` scala
+import sbtemrspark.EmrBootstrapActionConfig
+
+sparkEmrBootstrapActionConfigs := Some(
+  Seq(
+    EmrBootstrapActionConfig("Install python packages"," "s3://mybucket/pip_install_boot.sh").withArgs("numpy", "nltk")
+  )
+)
+```
+
+For people who already have a JSON config, there's a parsing function `EmrBootstrapActionConfig.parseJson(jsonString: String)` which can convert the JSON array into `List[EmrBootstrapActionConfig]`. And, if your JSON is located on S3, you can also parse the file on S3 directly (note that this will read the file from S3 right after you execute sbt):
+
+``` scala
+import sbtemrspark.EmrBootstrapActionConfig
+
+sparkEmrBootstrapActionConfigs := Some(
+  EmrBootstrapActionConfig
+    .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3ClientBuilder.value)
+    .right
+    .get
+)
+```
+
 ## Modify the configurations of underlying AWS objects
 
 There are two settings called `sparkJobFlowInstancesConfig` and `sparkRunJobFlowRequest`, which corresponds to [JobFlowInstancesConfig](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/JobFlowInstancesConfig.html) and [RunJobFlowRequest](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/RunJobFlowRequest.html) in AWS Java SDK. Some default values are already configured in these settings, but you can modify it for your own purpose, for example:
