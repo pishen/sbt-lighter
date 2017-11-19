@@ -103,6 +103,8 @@ sparkInstanceRole := "EMR_EC2_DefaultRole"
 
 //Optional Spark submit configurations
 sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
+
+sparkEc2KeyName := Some("your-keypair") 
 ```
 
 ## Other available commands
