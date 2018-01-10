@@ -41,25 +41,34 @@ object EmrSparkPlugin extends AutoPlugin {
     val sparkAwsRegion = settingKey[String]("aws's region")
     val sparkEmrRelease = settingKey[String]("emr's release label")
     val sparkEmrServiceRole = settingKey[String]("emr's service role")
-    val sparkEmrConfigs =
-      settingKey[Option[Seq[EmrConfig]]]("EMR configurations")
+    val sparkEmrConfigs = settingKey[Seq[EmrConfig]]("emr configurations")
+    val sparkEmrApplications = settingKey[Seq[String]]("emr applications")
     val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
-    val sparkSecurityGroupIds = settingKey[Option[Seq[String]]](
-      "additional security group ids for both master and slave ec2 instances")
+    val sparkSecurityGroupIds = settingKey[Seq[String]](
+      "additional security group ids for both master and slave ec2 instances"
+    )
     val sparkInstanceCount = settingKey[Int]("total number of instances")
     val sparkInstanceType = settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice =
-      settingKey[Option[String]]("spark nodes' bid price")
+      settingKey[Option[Double]]("spark nodes' bid price")
     val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
+    val sparkInstanceKeyName = settingKey[Option[String]]("instance's key name")
     val sparkS3JarFolder =
       settingKey[String]("S3 folder for putting the executable jar")
+    val sparkS3LogUri =
+      settingKey[Option[String]]("S3 folder for putting the EMR logs")
     val sparkTimeoutDuration =
       settingKey[Duration]("timeout duration for sparkTimeout")
+    val sparkSubmitConfs =
+      settingKey[Map[String, String]](
+        "The configs of --conf when running spark-submit"
+      )
 
     //underlying configs
     val sparkEmrClientBuilder =
       settingKey[AmazonElasticMapReduceClientBuilder](
-        "default EMR client builder")
+        "default EMR client builder"
+      )
     val sparkS3ClientBuilder =
       settingKey[AmazonS3ClientBuilder]("default S3 client builder")
     val sparkJobFlowInstancesConfig =
@@ -68,11 +77,8 @@ object EmrSparkPlugin extends AutoPlugin {
       settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
     val sparkS3PutObjectDecorator =
       settingKey[PutObjectRequest => PutObjectRequest](
-        "Allow user to set metadata with put request.Like server side encryption")
-    val sparkSubmitConfs =
-      settingKey[Map[String, String]]("Allow user to set spark submit conf")
-    val sparkEc2KeyName =
-      settingKey[Option[String]]("Allow user to specify sparkEc2KeyName")
+        "Allow user to set metadata with put request.Like server side encryption"
+      )
 
     //commands
     val sparkCreateCluster = taskKey[Unit]("create cluster")
@@ -100,23 +106,21 @@ object EmrSparkPlugin extends AutoPlugin {
 
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
-    sparkAwsRegion := "us-west-2",
-    sparkEmrRelease := "emr-5.9.0",
+    sparkEmrRelease := "emr-5.11.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
-    sparkEmrConfigs := None,
+    sparkEmrConfigs := Seq.empty,
+    sparkEmrApplications := Seq("Spark"),
     sparkSubnetId := None,
-    sparkSecurityGroupIds := None,
+    sparkSecurityGroupIds := Seq.empty,
     sparkInstanceCount := 1,
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
-    sparkS3JarFolder := "changeme",
     sparkTimeoutDuration := 90.minutes,
-    sparkS3PutObjectDecorator := { (req: PutObjectRequest) =>
-      req
-    },
-    sparkSubmitConfs := Map.empty[String, String],
-    sparkEc2KeyName := None,
+    sparkS3LogUri := None,
+    sparkS3PutObjectDecorator := identity,
+    sparkSubmitConfs := Map.empty,
+    sparkInstanceKeyName := None,
     sparkEmrClientBuilder := {
       AmazonElasticMapReduceClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
@@ -127,22 +131,27 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkJobFlowInstancesConfig := {
       Some(new JobFlowInstancesConfig())
         .map(c => sparkSubnetId.value.fold(c)(id => c.withEc2SubnetId(id)))
-        .map(c => sparkEc2KeyName.value.fold(c)(id => c.withEc2KeyName(id)))
+        .map(
+          c => sparkInstanceKeyName.value.fold(c)(id => c.withEc2KeyName(id))
+        )
         .map { c =>
-          sparkSecurityGroupIds.value.fold(c) { ids =>
+          val ids = sparkSecurityGroupIds.value
+          if (ids.nonEmpty) {
             c.withAdditionalMasterSecurityGroups(ids: _*)
               .withAdditionalSlaveSecurityGroups(ids: _*)
-          }
+          } else c
         }
         .get
         .withInstanceGroups {
           val masterConfig = Some(new InstanceGroupConfig())
             .map { c =>
-              sparkInstanceBidPrice.value.fold {
-                c.withMarket(MarketType.ON_DEMAND)
-              } {
-                c.withMarket(MarketType.SPOT).withBidPrice
-              }
+              sparkInstanceBidPrice.value
+                .map(_.toString)
+                .fold {
+                  c.withMarket(MarketType.ON_DEMAND)
+                } {
+                  c.withMarket(MarketType.SPOT).withBidPrice
+                }
             }
             .get
             .withInstanceCount(1)
@@ -152,11 +161,13 @@ object EmrSparkPlugin extends AutoPlugin {
           val slaveCount = sparkInstanceCount.value - 1
           val slaveConfig = Some(new InstanceGroupConfig())
             .map { c =>
-              sparkInstanceBidPrice.value.fold {
-                c.withMarket(MarketType.ON_DEMAND)
-              } {
-                c.withMarket(MarketType.SPOT).withBidPrice
-              }
+              sparkInstanceBidPrice.value
+                .map(_.toString)
+                .fold {
+                  c.withMarket(MarketType.ON_DEMAND)
+                } {
+                  c.withMarket(MarketType.SPOT).withBidPrice
+                }
             }
             .get
             .withInstanceCount(slaveCount)
@@ -174,13 +185,19 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkRunJobFlowRequest := {
       Some(new RunJobFlowRequest())
         .map { r =>
-          sparkEmrConfigs.value.fold(r) { emrConfigs =>
+          val emrConfigs = sparkEmrConfigs.value
+          if (emrConfigs.nonEmpty) {
             r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
-          }
+          } else r
+        }
+        .map { r =>
+          sparkS3LogUri.value.map(r.withLogUri).getOrElse(r)
         }
         .get
         .withName(sparkClusterName.value)
-        .withApplications(new Application().withName("Spark"))
+        .withApplications(
+          sparkEmrApplications.value.map(a => new Application().withName(a)): _*
+        )
         .withReleaseLabel(sparkEmrRelease.value)
         .withServiceRole(sparkEmrServiceRole.value)
         .withJobFlowRole(sparkInstanceRole.value)
@@ -192,11 +209,13 @@ object EmrSparkPlugin extends AutoPlugin {
       findClusterWithName(sparkClusterName.value) match {
         case Some(cluster) =>
           sys.error(
-            s"A cluster with name ${sparkClusterName.value} and id ${cluster.getId} already exists.")
+            s"A cluster with name ${sparkClusterName.value} and id ${cluster.getId} already exists."
+          )
         case None =>
           val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
           log.info(
-            s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
+            s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
+          )
       }
     },
     sparkSubmitJob := {
@@ -205,7 +224,8 @@ object EmrSparkPlugin extends AutoPlugin {
         implicit val emr = sparkEmrClientBuilder.value.build()
         val args = spaceDelimited("<arg>").parsed
         val mainClassValue = (mainClass in Compile).value.getOrElse(
-          sys.error("Can't locate the main class in your application."))
+          sys.error("Can't locate the main class in your application.")
+        )
         submitJob(mainClassValue, args, sparkSubmitConfs.value)
       }.evaluated
     },
@@ -225,8 +245,10 @@ object EmrSparkPlugin extends AutoPlugin {
       val emr = sparkEmrClientBuilder.value.build()
 
       val clusters = emr
-        .listClusters(new ListClustersRequest()
-          .withClusterStates(activatedClusterStates: _*))
+        .listClusters(
+          new ListClustersRequest()
+            .withClusterStates(activatedClusterStates: _*)
+        )
         .getClusters()
         .asScala
 
@@ -243,24 +265,18 @@ object EmrSparkPlugin extends AutoPlugin {
       val log = streams.value.log
       implicit val emr = sparkEmrClientBuilder.value.build()
 
-      val clusterIdOpt = emr
-        .listClusters(new ListClustersRequest()
-          .withClusterStates(activatedClusterStates: _*))
-        .getClusters()
-        .asScala
-        .find(_.getName == sparkClusterName.value)
-        .map(_.getId)
-
       findClusterWithName(sparkClusterName.value) match {
         case None =>
           log.info(
-            s"The cluster with name ${sparkClusterName.value} does not exist.")
+            s"The cluster with name ${sparkClusterName.value} does not exist."
+          )
         case Some(cluster) =>
           emr.terminateJobFlows {
             new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId)
           }
           log.info(
-            s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information.")
+            s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information."
+          )
       }
     },
     sparkMonitor := {
@@ -270,7 +286,8 @@ object EmrSparkPlugin extends AutoPlugin {
       findClusterWithName(sparkClusterName.value) match {
         case None =>
           log.info(
-            s"The cluster with name ${sparkClusterName.value} does not exist.")
+            s"The cluster with name ${sparkClusterName.value} does not exist."
+          )
         case Some(cluster) =>
           log.info(s"Found cluster ${cluster.getId}, start monitoring.")
           val timeoutTime = System.currentTimeMillis() +
@@ -352,22 +369,30 @@ object EmrSparkPlugin extends AutoPlugin {
         emr.addJobFlowSteps(
           new AddJobFlowStepsRequest()
             .withJobFlowId(cluster.getId)
-            .withSteps(step))
+            .withSteps(step)
+        )
         log.info(
-          s"Your job is added to the cluster with id ${cluster.getId}, you may check its status on AWS console.")
+          s"Your job is added to the cluster with id ${cluster.getId}, you may check its status on AWS console."
+        )
       case None =>
         val jobFlowRequest = sparkRunJobFlowRequest.value
           .withSteps(
-            (sparkRunJobFlowRequest.value.getSteps.asScala :+ step): _*)
-          .withInstances(sparkJobFlowInstancesConfig.value
-            .withKeepJobFlowAliveWhenNoSteps(false))
+            (sparkRunJobFlowRequest.value.getSteps.asScala :+ step): _*
+          )
+          .withInstances(
+            sparkJobFlowInstancesConfig.value
+              .withKeepJobFlowAliveWhenNoSteps(false)
+          )
         val res = emr.runJobFlow(jobFlowRequest)
         log.info(
-          s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console.")
+          s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
+        )
     }
   }
 
-  def findClusterWithName(name: String)(implicit emr: AmazonElasticMapReduce) = {
+  def findClusterWithName(
+      name: String
+  )(implicit emr: AmazonElasticMapReduce) = {
     emr
       .listClusters {
         new ListClustersRequest().withClusterStates(activatedClusterStates: _*)
