@@ -9,13 +9,13 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 1. Add sbt-emr-spark in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.14.0")
+  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.15.0")
   ```
 
 2. Setup sbt version for your project in `project/build.properties`:
 
   ```
-  sbt.version=1.0.2
+  sbt.version=1.1.0
   ```
 
   (Since version 0.13.0, sbt-emr-spark requires sbt 1.0)
@@ -37,7 +37,7 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
   sparkSubnetId := Some("subnet-xxxxxxxx")
 
   //(optional) Additional security groups that will be attached to master and slave's ec2.
-  sparkSecurityGroupIds := Some(Seq("sg-xxxxxxxx"))
+  sparkSecurityGroupIds := Seq("sg-xxxxxxxx")
 
   //Since we use cluster mode, we need a bucket to store your application's jar.
   sparkS3JarFolder := "s3://my-emr-bucket/my-emr-folder/"
@@ -88,23 +88,30 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 //Your cluster's name. Default value is copied from your project's `name` setting.
 sparkClusterName := "your-new-cluster-name"
 
-sparkEmrRelease := "emr-5.8.0"
+sparkEmrRelease := "emr-5.11.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
+
+//EMR applications that will be installed, default value is Seq("Spark")
+sparkEmrApplications := Seq("Spark", "Zeppelin")
 
 //EC2's instance type. Will be applied to both master and slave nodes.
 sparkInstanceType := "m3.xlarge"
 
 //Bid price for your spot instance.
 //The default value is None, which means all the instance will be on demand.
-sparkInstanceBidPrice := Some("0.38")
+sparkInstanceBidPrice := Some(0.38)
 
 sparkInstanceRole := "EMR_EC2_DefaultRole"
 
-//Optional Spark submit configurations
-sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
+//(optional) EC2 keypair
+sparkInstanceKeyName := Some("your-keypair")
 
-sparkEc2KeyName := Some("your-keypair") 
+//(optional) EMR logging folder
+sparkS3LogUri := Some("s3://my-emr-bucket/my-emr-log-folder/")
+
+//(optional) Configs of --conf when running spark-submit
+sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
 ```
 
 ## Other available commands
@@ -139,10 +146,8 @@ Instead of using this JSON config, one can add the following setting in `build.s
 ``` scala
 import sbtemrspark.EmrConfig
 
-sparkEmrConfigs := Some(
-  Seq(
-    EmrConfig("spark").withProperties("maximizeResourceAllocation" -> "true")
-  )
+sparkEmrConfigs := Seq(
+  EmrConfig("spark").withProperties("maximizeResourceAllocation" -> "true")
 )
 ```
 
@@ -151,29 +156,15 @@ For people who already have a JSON config, there's a parsing function `EmrConfig
 ``` scala
 import sbtemrspark.EmrConfig
 
-sparkEmrConfigs := Some(
-  EmrConfig
-    .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3ClientBuilder.value)
-    .right
-    .get
-)
+sparkEmrConfigs := EmrConfig
+  .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3ClientBuilder.value)
+  .right
+  .get
 ```
 
 ## Modify the configurations of underlying AWS objects
 
 There are two settings called `sparkJobFlowInstancesConfig` and `sparkRunJobFlowRequest`, which corresponds to [JobFlowInstancesConfig](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/JobFlowInstancesConfig.html) and [RunJobFlowRequest](http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/elasticmapreduce/model/RunJobFlowRequest.html) in AWS Java SDK. Some default values are already configured in these settings, but you can modify it for your own purpose, for example:
-
-#### To set the S3 logging folder for EMR cluster:
-
-``` scala
-sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withLogUri("s3://aws-logs-xxxxxxxxxxxx-ap-northeast-1/elasticmapreduce/")
-```
-
-#### To set the EC2 keypair for each instances:
-
-``` scala
-sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value.withEc2KeyName("your-keypair")
-```
 
 #### To set the master and slave security groups separately (This requires you leaving `sparkSecurityGroupIds` as `None` in step 2):
 
@@ -187,15 +178,6 @@ sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value
 
 ``` scala
 sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withAutoScalingRole("EMR_AutoScaling_DefaultRole")
-```
-
-#### To add EMR applications other than Spark:
-
-``` scala
-import com.amazonaws.services.elasticmapreduce.model.Application
-
-sparkRunJobFlowRequest := sparkRunJobFlowRequest.value
-  .withApplications(Seq("Spark", "Presto", "Flink").map(a => new Application().withName(a)):_*)
 ```
 
 #### To set the tags on cluster resources:
@@ -249,7 +231,7 @@ lazy val Production = config("production")
 inConfig(Testing)(EmrSparkPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "ap-northeast-1",
   sparkSubnetId := Some("subnet-xxxxxxxx"),
-  sparkSecurityGroupIds := Some(Seq("sg-xxxxxxxx")),
+  sparkSecurityGroupIds := Seq("sg-xxxxxxxx"),
   sparkInstanceCount := 1,
   sparkS3JarFolder := "s3://my-testing-bucket/my-emr-folder/"
 ))
@@ -257,12 +239,12 @@ inConfig(Testing)(EmrSparkPlugin.baseSettings ++ Seq(
 inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "us-west-2",
   sparkSubnetId := Some("subnet-yyyyyyyy"),
-  sparkSecurityGroupIds := Some(Seq("sg-yyyyyyyy")),
+  sparkSecurityGroupIds := Seq("sg-yyyyyyyy"),
   sparkInstanceCount := 20,
   sparkS3JarFolder := "s3://my-production-bucket/my-emr-folder/",
-  sparkRunJobFlowRequest := sparkRunJobFlowRequest.value.withLogUri("s3://aws-logs-xxxxxxxxxxxx-us-west-2/elasticmapreduce/"),
-  sparkInstanceBidPrice := Some("0.39"),
-  sparkEmrConfigs := Some(Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true"))))
+  sparkS3LogUri := Some("s3://aws-logs-xxxxxxxxxxxx-us-west-2/elasticmapreduce/")
+  sparkInstanceBidPrice := Some(0.39),
+  sparkEmrConfigs := Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true")))
 ))
 ```
 
