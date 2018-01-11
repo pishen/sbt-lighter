@@ -37,22 +37,34 @@ import scala.concurrent.duration._
 object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
     //configs
-    val sparkClusterName = settingKey[String]("emr cluster's name")
-    val sparkAwsRegion = settingKey[String]("aws's region")
-    val sparkEmrRelease = settingKey[String]("emr's release label")
-    val sparkEmrServiceRole = settingKey[String]("emr's service role")
-    val sparkEmrConfigs = settingKey[Seq[EmrConfig]]("emr configurations")
-    val sparkEmrApplications = settingKey[Seq[String]]("emr applications")
-    val sparkSubnetId = settingKey[Option[String]]("spark's subnet id")
-    val sparkSecurityGroupIds = settingKey[Seq[String]](
-      "additional security group ids for both master and slave ec2 instances"
-    )
-    val sparkInstanceCount = settingKey[Int]("total number of instances")
-    val sparkInstanceType = settingKey[String]("spark nodes' instance type")
+    val sparkClusterName =
+      settingKey[String]("emr cluster's name")
+    val sparkAwsRegion =
+      settingKey[String]("aws's region")
+    val sparkEmrRelease =
+      settingKey[String]("emr's release label")
+    val sparkEmrServiceRole =
+      settingKey[String]("emr's service role")
+    val sparkEmrConfigs =
+      settingKey[Seq[EmrConfig]]("emr configurations")
+    val sparkEmrApplications =
+      settingKey[Seq[String]]("emr applications")
+    val sparkSubnetId =
+      settingKey[Option[String]]("spark's subnet id")
+    val sparkSecurityGroupIds =
+      settingKey[Seq[String]](
+        "additional security group ids for both master and slave ec2 instances"
+      )
+    val sparkInstanceCount =
+      settingKey[Int]("total number of instances")
+    val sparkInstanceType =
+      settingKey[String]("spark nodes' instance type")
     val sparkInstanceBidPrice =
       settingKey[Option[Double]]("spark nodes' bid price")
-    val sparkInstanceRole = settingKey[String]("spark ec2 instance's role")
-    val sparkInstanceKeyName = settingKey[Option[String]]("instance's key name")
+    val sparkInstanceRole =
+      settingKey[String]("spark ec2 instance's role")
+    val sparkInstanceKeyName =
+      settingKey[Option[String]]("instance's key name")
     val sparkS3JarFolder =
       settingKey[String]("S3 folder for putting the executable jar")
     val sparkS3LogUri =
@@ -81,10 +93,14 @@ object EmrSparkPlugin extends AutoPlugin {
       )
 
     //commands
-    val sparkCreateCluster = taskKey[Unit]("create cluster")
-    val sparkListClusters = taskKey[Unit]("list existing active clusters")
-    val sparkTerminateCluster = taskKey[Unit]("terminate cluster")
-    val sparkSubmitJob = inputKey[Unit]("submit the job")
+    val sparkCreateCluster =
+      taskKey[Unit]("create cluster")
+    val sparkListClusters =
+      taskKey[Unit]("list existing active clusters")
+    val sparkTerminateCluster =
+      taskKey[Unit]("terminate cluster")
+    val sparkSubmitJob =
+      inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain =
       inputKey[Unit]("submit the job with specified main class")
     val sparkMonitor =
