@@ -83,14 +83,14 @@ object EmrSparkPlugin extends AutoPlugin {
       )
     val sparkS3ClientBuilder =
       settingKey[AmazonS3ClientBuilder]("default S3 client builder")
-    val sparkJobFlowInstancesConfig =
-      settingKey[JobFlowInstancesConfig]("default JobFlowInstancesConfig")
-    val sparkRunJobFlowRequest =
-      settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
     val sparkS3PutObjectDecorator =
       settingKey[PutObjectRequest => PutObjectRequest](
         "Allow user to set metadata with put request.Like server side encryption"
       )
+    val sparkJobFlowInstancesConfig =
+      settingKey[JobFlowInstancesConfig]("default JobFlowInstancesConfig")
+    val sparkRunJobFlowRequest =
+      settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
 
     //commands
     val sparkCreateCluster =
