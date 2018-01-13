@@ -1,13 +1,13 @@
 name := "sbt-emr-spark"
 
-version := "0.15.1"
+version := "0.16.0-SNAPSHOT"
 
 scalaVersion := "2.12.4"
 
 sbtPlugin := true
 
 val awsVersion = "1.11.221"
-val circeVersion = "0.8.0"
+val circeVersion = "0.9.0"
 
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % awsVersion,
@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser" % circeVersion
 )
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.5")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.6")
 
 publishMavenStyle := false
 organization := "net.pishen"
