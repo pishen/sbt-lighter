@@ -122,6 +122,7 @@ object EmrSparkPlugin extends AutoPlugin {
 
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
+    sparkAwsRegion := "changeme",
     sparkEmrRelease := "emr-5.11.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := Seq.empty,
@@ -133,6 +134,7 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkTimeoutDuration := 90.minutes,
+    sparkS3JarFolder := "changeme",
     sparkS3LogUri := None,
     sparkS3PutObjectDecorator := identity,
     sparkSubmitConfs := Map.empty,
@@ -142,7 +144,8 @@ object EmrSparkPlugin extends AutoPlugin {
         .withRegion(sparkAwsRegion.value)
     },
     sparkS3ClientBuilder := {
-      AmazonS3ClientBuilder.standard.withRegion(sparkAwsRegion.value)
+      AmazonS3ClientBuilder.standard
+        .withRegion(sparkAwsRegion.value)
     },
     sparkJobFlowInstancesConfig := {
       Some(new JobFlowInstancesConfig())

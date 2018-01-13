@@ -1,6 +1,6 @@
 name := "sbt-emr-spark"
 
-version := "0.15.0"
+version := "0.15.1-SNAPSHOT"
 
 scalaVersion := "2.12.4"
 
