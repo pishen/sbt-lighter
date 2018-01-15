@@ -23,6 +23,7 @@ import com.amazonaws.services.elasticmapreduce.{
 }
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.services.s3.model.PutObjectRequest
+import com.typesafe.scalalogging.StrictLogging
 import sbt.Defaults.runMainParser
 import sbt.Keys._
 import sbt._
@@ -34,7 +35,7 @@ import sjsonnew.BasicJsonProtocol._
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-object EmrSparkPlugin extends AutoPlugin {
+object EmrSparkPlugin extends AutoPlugin with StrictLogging {
   object autoImport {
     //configs
     val sparkClusterName =
@@ -225,7 +226,6 @@ object EmrSparkPlugin extends AutoPlugin {
         .withInstances(sparkJobFlowInstancesConfig.value)
     },
     sparkCreateCluster := {
-      implicit val log = streams.value.log
       implicit val emr = sparkEmrClientBuilder.value.build()
       findClusterWithName(sparkClusterName.value) match {
         case Some(cluster) =>
@@ -234,14 +234,13 @@ object EmrSparkPlugin extends AutoPlugin {
           )
         case None =>
           val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
-          log.info(
+          logger.info(
             s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
           )
       }
     },
     sparkSubmitJob := {
       Def.inputTaskDyn {
-        implicit val log = streams.value.log
         implicit val emr = sparkEmrClientBuilder.value.build()
         val args = spaceDelimited("<arg>").parsed
         val mainClassValue = (mainClass in Compile).value.getOrElse(
@@ -252,7 +251,6 @@ object EmrSparkPlugin extends AutoPlugin {
     },
     sparkSubmitJobWithMain := {
       Def.inputTaskDyn {
-        implicit val log = streams.value.log
         implicit val emr = sparkEmrClientBuilder.value.build()
         val (mainClass, args) =
           loadForParser(discoveredMainClasses in Compile) { (s, names) =>
@@ -262,7 +260,6 @@ object EmrSparkPlugin extends AutoPlugin {
       }.evaluated
     },
     sparkListClusters := {
-      val log = streams.value.log
       val emr = sparkEmrClientBuilder.value.build()
 
       val clusters = emr
@@ -274,43 +271,41 @@ object EmrSparkPlugin extends AutoPlugin {
         .asScala
 
       if (clusters.isEmpty) {
-        log.info("No active cluster found.")
+        logger.info("No active cluster found.")
       } else {
-        log.info(s"${clusters.length} active clusters found: ")
+        logger.info(s"${clusters.length} active clusters found: ")
         clusters.foreach { c =>
-          log.info(s"Name: ${c.getName} | Id: ${c.getId}")
+          logger.info(s"Name: ${c.getName} | Id: ${c.getId}")
         }
       }
     },
     sparkTerminateCluster := {
-      val log = streams.value.log
       implicit val emr = sparkEmrClientBuilder.value.build()
 
       findClusterWithName(sparkClusterName.value) match {
         case None =>
-          log.info(
+          logger.info(
             s"The cluster with name ${sparkClusterName.value} does not exist."
           )
         case Some(cluster) =>
           emr.terminateJobFlows {
             new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId)
           }
-          log.info(
+          logger.info(
             s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information."
           )
       }
     },
     sparkMonitor := {
-      val log = streams.value.log
       implicit val emr = sparkEmrClientBuilder.value.build()
 
       findClusterWithName(sparkClusterName.value) match {
         case None =>
-          log.info(
+          logger.info(
             s"The cluster with name ${sparkClusterName.value} does not exist."
           )
         case Some(cluster) =>
-          log.info(s"Found cluster ${cluster.getId}, start monitoring.")
+          logger.info(s"Found cluster ${cluster.getId}, start monitoring.")
           val timeoutTime = System.currentTimeMillis() +
             sparkTimeoutDuration.value.toMillis
           def checkStatus(): Unit = {
@@ -340,7 +335,7 @@ object EmrSparkPlugin extends AutoPlugin {
                 sys.error("Cluster terminated with abnormal step.")
               } else {
                 println()
-                log.info("Cluster terminated without error.")
+                logger.info("Cluster terminated without error.")
               }
             } else {
               Thread.sleep(5000)
@@ -356,10 +351,10 @@ object EmrSparkPlugin extends AutoPlugin {
       mainClass: String,
       args: Seq[String],
       sparkConfs: Map[String, String]
-  )(implicit log: Logger, emr: AmazonElasticMapReduce) = Def.task {
+  )(implicit emr: AmazonElasticMapReduce) = Def.task {
     val jar = assembly.value
     val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
-    log.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
+    logger.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
 
     val putRequest = sparkS3PutObjectDecorator.value(
       new PutObjectRequest(s3Jar.bucket, s3Jar.key, jar)
@@ -392,7 +387,7 @@ object EmrSparkPlugin extends AutoPlugin {
             .withJobFlowId(cluster.getId)
             .withSteps(step)
         )
-        log.info(
+        logger.info(
           s"Your job is added to the cluster with id ${cluster.getId}, you may check its status on AWS console."
         )
       case None =>
@@ -405,7 +400,7 @@ object EmrSparkPlugin extends AutoPlugin {
               .withKeepJobFlowAliveWhenNoSteps(false)
           )
         val res = emr.runJobFlow(jobFlowRequest)
-        log.info(
+        logger.info(
           s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
         )
     }

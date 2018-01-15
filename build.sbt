@@ -12,6 +12,7 @@ val circeVersion = "0.9.0"
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % awsVersion,
   "com.amazonaws" % "aws-java-sdk-s3" % awsVersion,
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.7.2",
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,
   "io.circe" %% "circe-parser" % circeVersion
