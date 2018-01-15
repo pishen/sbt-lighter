@@ -133,18 +133,20 @@ object EmrSparkPlugin extends AutoPlugin {
     sparkInstanceType := "m3.xlarge",
     sparkInstanceBidPrice := None,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
+    sparkInstanceKeyName := None,
     sparkTimeoutDuration := 90.minutes,
     sparkS3JarFolder := "changeme",
     sparkS3LogUri := None,
     sparkS3PutObjectDecorator := identity,
     sparkSubmitConfs := Map.empty,
-    sparkInstanceKeyName := None,
     sparkEmrClientBuilder := {
-      AmazonElasticMapReduceClientBuilder.standard
+      AmazonElasticMapReduceClientBuilder
+        .standard
         .withRegion(sparkAwsRegion.value)
     },
     sparkS3ClientBuilder := {
-      AmazonS3ClientBuilder.standard
+      AmazonS3ClientBuilder
+        .standard
         .withRegion(sparkAwsRegion.value)
     },
     sparkJobFlowInstancesConfig := {
