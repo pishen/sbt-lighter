@@ -16,7 +16,11 @@
 
 package sbtemrspark
 
-import com.amazonaws.services.elasticmapreduce.model.{Unit => _, _}
+import com.amazonaws.services.elasticmapreduce.model.{
+  Unit => _,
+  Command => _,
+  _
+}
 import com.amazonaws.services.elasticmapreduce.{
   AmazonElasticMapReduce,
   AmazonElasticMapReduceClientBuilder
@@ -40,6 +44,8 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
     //configs
     val sparkClusterName =
       settingKey[String]("emr cluster's name")
+    val sparkClusterId =
+      settingKey[Option[String]]("emr cluster's id")
     val sparkAwsRegion =
       settingKey[String]("aws's region")
     val sparkEmrRelease =
@@ -94,12 +100,8 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       settingKey[RunJobFlowRequest]("default RunJobFlowRequest")
 
     //commands
-    val sparkCreateCluster =
-      taskKey[Unit]("create cluster")
     val sparkListClusters =
       taskKey[Unit]("list existing active clusters")
-    val sparkTerminateCluster =
-      taskKey[Unit]("terminate cluster")
     val sparkSubmitJob =
       inputKey[Unit]("submit the job")
     val sparkSubmitJobWithMain =
@@ -123,6 +125,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
 
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
+    sparkClusterId := None,
     sparkAwsRegion := "changeme",
     sparkEmrRelease := "emr-5.11.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
@@ -141,13 +144,11 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
     sparkS3PutObjectDecorator := identity,
     sparkSubmitConfs := Map.empty,
     sparkEmrClientBuilder := {
-      AmazonElasticMapReduceClientBuilder
-        .standard
+      AmazonElasticMapReduceClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
     },
     sparkS3ClientBuilder := {
-      AmazonS3ClientBuilder
-        .standard
+      AmazonS3ClientBuilder.standard
         .withRegion(sparkAwsRegion.value)
     },
     sparkJobFlowInstancesConfig := {
@@ -225,20 +226,6 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
         .withJobFlowRole(sparkInstanceRole.value)
         .withInstances(sparkJobFlowInstancesConfig.value)
     },
-    sparkCreateCluster := {
-      implicit val emr = sparkEmrClientBuilder.value.build()
-      findClusterWithName(sparkClusterName.value) match {
-        case Some(cluster) =>
-          sys.error(
-            s"A cluster with name ${sparkClusterName.value} and id ${cluster.getId} already exists."
-          )
-        case None =>
-          val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
-          logger.info(
-            s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
-          )
-      }
-    },
     sparkSubmitJob := {
       Def.inputTaskDyn {
         implicit val emr = sparkEmrClientBuilder.value.build()
@@ -260,40 +247,14 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       }.evaluated
     },
     sparkListClusters := {
-      val emr = sparkEmrClientBuilder.value.build()
-
-      val clusters = emr
-        .listClusters(
-          new ListClustersRequest()
-            .withClusterStates(activatedClusterStates: _*)
-        )
-        .getClusters()
-        .asScala
-
+      val clusters = clusterMap.value().values
       if (clusters.isEmpty) {
         logger.info("No active cluster found.")
       } else {
-        logger.info(s"${clusters.length} active clusters found: ")
+        logger.info(s"${clusters.size} active clusters found: ")
         clusters.foreach { c =>
-          logger.info(s"Name: ${c.getName} | Id: ${c.getId}")
+          logger.info(s"Id: ${c.getId} | Name: ${c.getName}")
         }
-      }
-    },
-    sparkTerminateCluster := {
-      implicit val emr = sparkEmrClientBuilder.value.build()
-
-      findClusterWithName(sparkClusterName.value) match {
-        case None =>
-          logger.info(
-            s"The cluster with name ${sparkClusterName.value} does not exist."
-          )
-        case Some(cluster) =>
-          emr.terminateJobFlows {
-            new TerminateJobFlowsRequest().withJobFlowIds(cluster.getId)
-          }
-          logger.info(
-            s"Cluster with id ${cluster.getId} is terminating, please check aws console for the following information."
-          )
       }
     },
     sparkMonitor := {
@@ -344,7 +305,63 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
           }
           checkStatus()
       }
-    }
+    },
+    shellPrompt := { state =>
+      Project
+        .extract(state)
+        .get(sparkClusterId)
+        .map("[\u001B[36m" + _ + "\u001B[0m]> ")
+        .getOrElse("> ")
+    },
+    commands ++= Seq(
+      Command.command("sparkCreateCluster") { state =>
+        val emr = sparkEmrClientBuilder.value.build
+        val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
+        logger.info(
+          s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
+        )
+        Project
+          .extract(state)
+          .append(
+            Seq(sparkClusterId := Some(res.getJobFlowId)),
+            state
+          )
+      },
+      Command("sparkBindCluster") { state =>
+        Space ~> oneOf(
+          clusterMap.value().keys.toSeq.map(literal)
+        )
+      } { case (state, clusterId) =>
+        Project
+          .extract(state)
+          .append(
+            Seq(sparkClusterId := Some(clusterId)),
+            state
+          )
+      },
+      Command.command("sparkTerminateCluster") { state =>
+        sparkClusterId.value match {
+          case None =>
+            logger.info(
+              "sparkClusterId is None, please specify the cluster you want to terminate using sparkBindToCluster first."
+            )
+          case Some(clusterId) =>
+            val emr = sparkEmrClientBuilder.value.build
+            emr.terminateJobFlows(
+              new TerminateJobFlowsRequest().withJobFlowIds(clusterId)
+            )
+            logger.info(
+              s"Cluster with id ${clusterId} is terminating, please check aws console for the following information."
+            )
+        }
+        Project
+          .extract(state)
+          .append(
+            Seq(sparkClusterId := None),
+            state
+          )
+      }
+    )
   )
 
   def submitJob(
@@ -404,6 +421,24 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
           s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
         )
     }
+  }
+
+  lazy val clusterMap = Def.setting {
+    () => sparkEmrClientBuilder
+      .value
+      .build
+      .listClusters(
+        new ListClustersRequest().withClusterStates(
+          ClusterState.RUNNING,
+          ClusterState.STARTING,
+          ClusterState.WAITING,
+          ClusterState.BOOTSTRAPPING
+        )
+      )
+      .getClusters
+      .asScala
+      .map(cluster => cluster.getId -> cluster)
+      .toMap
   }
 
   def findClusterWithName(
