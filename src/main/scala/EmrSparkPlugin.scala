@@ -102,10 +102,10 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
     //commands
     val sparkListClusters =
       taskKey[Unit]("list existing active clusters")
-    val sparkSubmitJob =
-      inputKey[Unit]("submit the job")
-    val sparkSubmitJobWithMain =
-      inputKey[Unit]("submit the job with specified main class")
+    // val sparkSubmitJob =
+    //   inputKey[Unit]("submit the job")
+    // val sparkSubmitJobWithMain =
+    //   inputKey[Unit]("submit the job with specified main class")
     val sparkMonitor =
       taskKey[Unit]("monitor and terminate the cluster when timeout")
   }
@@ -226,26 +226,26 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
         .withJobFlowRole(sparkInstanceRole.value)
         .withInstances(sparkJobFlowInstancesConfig.value)
     },
-    sparkSubmitJob := {
-      Def.inputTaskDyn {
-        implicit val emr = sparkEmrClientBuilder.value.build()
-        val args = spaceDelimited("<arg>").parsed
-        val mainClassValue = (mainClass in Compile).value.getOrElse(
-          sys.error("Can't locate the main class in your application.")
-        )
-        submitJob(mainClassValue, args, sparkSubmitConfs.value)
-      }.evaluated
-    },
-    sparkSubmitJobWithMain := {
-      Def.inputTaskDyn {
-        implicit val emr = sparkEmrClientBuilder.value.build()
-        val (mainClass, args) =
-          loadForParser(discoveredMainClasses in Compile) { (s, names) =>
-            runMainParser(s, names getOrElse Nil)
-          }.parsed
-        submitJob(mainClass, args, sparkSubmitConfs.value)
-      }.evaluated
-    },
+    // sparkSubmitJob := {
+    //   Def.inputTaskDyn {
+    //     implicit val emr = sparkEmrClientBuilder.value.build()
+    //     val args = spaceDelimited("<arg>").parsed
+    //     val mainClassValue = (mainClass in Compile).value.getOrElse(
+    //       sys.error("Can't locate the main class in your application.")
+    //     )
+    //     submitJob(mainClassValue, args, sparkSubmitConfs.value)
+    //   }.evaluated
+    // },
+    // sparkSubmitJobWithMain := {
+    //   Def.inputTaskDyn {
+    //     implicit val emr = sparkEmrClientBuilder.value.build()
+    //     val (mainClass, args) =
+    //       loadForParser(discoveredMainClasses in Compile) { (s, names) =>
+    //         runMainParser(s, names getOrElse Nil)
+    //       }.parsed
+    //     submitJob(mainClass, args, sparkSubmitConfs.value)
+    //   }.evaluated
+    // },
     sparkListClusters := {
       val clusters = clusterMap.value().values
       if (clusters.isEmpty) {
@@ -313,7 +313,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
         .map("[\u001B[36m" + _ + "\u001B[0m]> ")
         .getOrElse("> ")
     },
-    commands ++= Seq(
+    commands := Seq(
       Command.command("sparkCreateCluster") { state =>
         val emr = sparkEmrClientBuilder.value.build
         val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
@@ -331,13 +331,14 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
         Space ~> oneOf(
           clusterMap.value().keys.toSeq.map(literal)
         )
-      } { case (state, clusterId) =>
-        Project
-          .extract(state)
-          .append(
-            Seq(sparkClusterId := Some(clusterId)),
-            state
-          )
+      } {
+        case (state, clusterId) =>
+          Project
+            .extract(state)
+            .append(
+              Seq(sparkClusterId := Some(clusterId)),
+              state
+            )
       },
       Command.command("sparkTerminateCluster") { state =>
         sparkClusterId.value match {
@@ -360,73 +361,100 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
             Seq(sparkClusterId := None),
             state
           )
+      },
+      Command.args("sparkSubmitJob", "<args>") { (state, args) =>
+        val mainClassValue = Project
+          .runTask(mainClass in Compile, state)
+          .flatMap {
+            _._2.toEither.toOption.flatten
+          }
+          .getOrElse(
+            sys.error("Can't locate the main class in your application.")
+          )
+        val jar = Project
+          .runTask(assembly, state)
+          .flatMap {
+            _._2.toEither.toOption
+          }
+          .getOrElse(
+            sys.error("Error when running assembly.")
+          )
+        val clusterId = submitJob.value(sparkSubmitConfs.value, mainClassValue, args, jar)
+        Project
+          .extract(state)
+          .append(
+            Seq(sparkClusterId := Some(clusterId)),
+            state
+          )
       }
     )
   )
 
-  def submitJob(
-      mainClass: String,
-      args: Seq[String],
-      sparkConfs: Map[String, String]
-  )(implicit emr: AmazonElasticMapReduce) = Def.task {
-    val jar = assembly.value
-    val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
-    logger.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
+  lazy val submitJob = Def.setting {
+    (
+        sparkConfs: Map[String, String],
+        mainClass: String,
+        args: Seq[String],
+        jar: File
+    ) =>
+      implicit val emr = sparkEmrClientBuilder.value.build
+      val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
+      logger.info(s"Putting ${jar.getPath} to ${s3Jar.toString}")
 
-    val putRequest = sparkS3PutObjectDecorator.value(
-      new PutObjectRequest(s3Jar.bucket, s3Jar.key, jar)
-    )
-    sparkS3ClientBuilder.value.build().putObject(putRequest)
-
-    val sparkSubmitArgs = Seq(
-      "spark-submit",
-      "--deploy-mode",
-      "cluster",
-      "--class",
-      mainClass
-    ) ++ sparkConfs.toSeq.flatMap {
-      case (k, v) => Seq("--conf", k + "=" + v)
-    } ++ (s3Jar.toString +: args)
-
-    val step = new StepConfig()
-      .withActionOnFailure(ActionOnFailure.CONTINUE)
-      .withName("Spark Step")
-      .withHadoopJarStep(
-        new HadoopJarStepConfig()
-          .withJar("command-runner.jar")
-          .withArgs(sparkSubmitArgs.asJava)
+      val putRequest = sparkS3PutObjectDecorator.value(
+        new PutObjectRequest(s3Jar.bucket, s3Jar.key, jar)
       )
+      sparkS3ClientBuilder.value.build().putObject(putRequest)
 
-    findClusterWithName(sparkClusterName.value) match {
-      case Some(cluster) =>
-        emr.addJobFlowSteps(
-          new AddJobFlowStepsRequest()
-            .withJobFlowId(cluster.getId)
-            .withSteps(step)
+      val sparkSubmitArgs = Seq(
+        "spark-submit",
+        "--deploy-mode",
+        "cluster",
+        "--class",
+        mainClass
+      ) ++ sparkConfs.toSeq.flatMap {
+        case (k, v) => Seq("--conf", k + "=" + v)
+      } ++ (s3Jar.toString +: args)
+
+      val step = new StepConfig()
+        .withActionOnFailure(ActionOnFailure.CONTINUE)
+        .withName("Spark Step")
+        .withHadoopJarStep(
+          new HadoopJarStepConfig()
+            .withJar("command-runner.jar")
+            .withArgs(sparkSubmitArgs.asJava)
         )
-        logger.info(
-          s"Your job is added to the cluster with id ${cluster.getId}, you may check its status on AWS console."
-        )
-      case None =>
-        val jobFlowRequest = sparkRunJobFlowRequest.value
-          .withSteps(
-            (sparkRunJobFlowRequest.value.getSteps.asScala :+ step): _*
+
+      sparkClusterId.value match {
+        case Some(clusterId) =>
+          emr.addJobFlowSteps(
+            new AddJobFlowStepsRequest()
+              .withJobFlowId(clusterId)
+              .withSteps(step)
           )
-          .withInstances(
-            sparkJobFlowInstancesConfig.value
-              .withKeepJobFlowAliveWhenNoSteps(false)
+          logger.info(
+            s"Your job is added to the cluster with id ${clusterId}, you may check its status on AWS console."
           )
-        val res = emr.runJobFlow(jobFlowRequest)
-        logger.info(
-          s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
-        )
-    }
+          clusterId
+        case None =>
+          val jobFlowRequest = sparkRunJobFlowRequest.value
+            .withSteps(
+              (sparkRunJobFlowRequest.value.getSteps.asScala :+ step): _*
+            )
+            .withInstances(
+              sparkJobFlowInstancesConfig.value
+                .withKeepJobFlowAliveWhenNoSteps(false)
+            )
+          val res = emr.runJobFlow(jobFlowRequest)
+          logger.info(
+            s"Your new cluster's id is ${res.getJobFlowId}, you may check its status on AWS console."
+          )
+          res.getJobFlowId
+      }
   }
 
-  lazy val clusterMap = Def.setting {
-    () => sparkEmrClientBuilder
-      .value
-      .build
+  lazy val clusterMap = Def.setting { () =>
+    sparkEmrClientBuilder.value.build
       .listClusters(
         new ListClustersRequest().withClusterStates(
           ClusterState.RUNNING,
