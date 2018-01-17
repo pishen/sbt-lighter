@@ -23,7 +23,6 @@ import com.amazonaws.services.elasticmapreduce.{
 }
 import com.amazonaws.services.s3.AmazonS3ClientBuilder
 import com.amazonaws.services.s3.model.PutObjectRequest
-import com.typesafe.scalalogging.StrictLogging
 import sbt.Defaults.runMainParser
 import sbt.Keys._
 import sbt._
@@ -36,7 +35,7 @@ import sjsonnew.BasicJsonProtocol._
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
-object EmrSparkPlugin extends AutoPlugin with StrictLogging {
+object EmrSparkPlugin extends AutoPlugin {
   object autoImport {
     //configs
     val sparkClusterName =
@@ -228,6 +227,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
         .withInstances(sparkJobFlowInstancesConfig.value)
     },
     sparkCreateCluster := {
+      val logger = streams.value.log
       val emr = sparkEmrClientBuilder.value.build
       val res = emr.runJobFlow(sparkRunJobFlowRequest.value)
       IO.write(file(sparkClusterIdFile.value), res.getJobFlowId.getBytes)
@@ -236,6 +236,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       )
     },
     sparkListClusters := {
+      val logger = streams.value.log
       val clusters = clusterMap.value().values
       if (clusters.isEmpty) {
         logger.info("No active cluster found.")
@@ -247,6 +248,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       }
     },
     sparkTerminateCluster := {
+      val logger = streams.value.log
       val clusterIdFile = file(sparkClusterIdFile.value)
       getCluster.value(clusterIdFile) match {
         case Some(cluster) =>
@@ -265,6 +267,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
     },
     sparkSubmitJob := {
       Def.inputTaskDyn {
+        implicit val logger = streams.value.log
         implicit val emr = sparkEmrClientBuilder.value.build()
         val args = spaceDelimited("<arg>").parsed
         val mainClassValue = (mainClass in Compile).value.getOrElse(
@@ -275,6 +278,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
     },
     sparkSubmitJobWithMain := {
       Def.inputTaskDyn {
+        implicit val logger = streams.value.log
         implicit val emr = sparkEmrClientBuilder.value.build()
         val (mainClass, args) =
           loadForParser(discoveredMainClasses in Compile) { (s, names) =>
@@ -284,6 +288,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       }.evaluated
     },
     sparkMonitor := {
+      val logger = streams.value.log
       implicit val emr = sparkEmrClientBuilder.value.build()
       val clusterIdFile = file(sparkClusterIdFile.value)
       getCluster.value(clusterIdFile) match {
@@ -337,7 +342,7 @@ object EmrSparkPlugin extends AutoPlugin with StrictLogging {
       mainClass: String,
       args: Seq[String],
       sparkConfs: Map[String, String]
-  ) = Def.task {
+  )(implicit logger: Logger) = Def.task {
     implicit val emr = sparkEmrClientBuilder.value.build
     val jar = assembly.value
     val s3Jar = new S3Url(sparkS3JarFolder.value) / jar.getName
