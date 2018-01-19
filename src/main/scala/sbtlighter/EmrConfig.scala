@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package sbtemrspark
+package sbtlighter
 
 import scala.collection.JavaConverters._
 import scala.io.Source

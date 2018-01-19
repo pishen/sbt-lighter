@@ -1,0 +1,6 @@
+> sparkCreateCluster
+$ exists .cluster_id
+> sparkSubmit
+$ exists target/scala-2.11/simple-assembly-0.1.0-SNAPSHOT.jar
+> sparkTerminateCluster
+$ absent .cluster_id

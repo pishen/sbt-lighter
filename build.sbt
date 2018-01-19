@@ -1,6 +1,6 @@
-name := "sbt-emr-spark"
+name := "sbt-lighter"
 
-version := "0.16.0-SNAPSHOT"
+version := "1.0.0-SNAPSHOT"
 
 scalaVersion := "2.12.4"
 
