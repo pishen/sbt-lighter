@@ -7,7 +7,7 @@ scalaVersion := "2.12.4"
 sbtPlugin := true
 
 val awsVersion = "1.11.221"
-val circeVersion = "0.9.0"
+val circeVersion = "0.8.0"
 
 libraryDependencies ++= Seq(
   "com.amazonaws" % "aws-java-sdk-emr" % awsVersion,

@@ -60,10 +60,7 @@ object EmrConfig {
   def parseJson(jsonString: String) = decode[List[EmrConfig]](jsonString)
   def parseJsonFromS3(s3Url: String)(implicit s3: AmazonS3) = {
     val s3JsonUrl = new S3Url(s3Url)
-    val s3JsonInputStream = s3
-      .getObject(s3JsonUrl.bucket, s3JsonUrl.key)
-      .getObjectContent
-    val jsonString = Source.fromInputStream(s3JsonInputStream).mkString
+    val jsonString = s3.getObjectAsString(s3JsonUrl.bucket, s3JsonUrl.key)
     parseJson(jsonString)
   }
 }
