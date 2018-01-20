@@ -1,6 +1,6 @@
 name := "sbt-lighter"
 
-version := "1.0.0-SNAPSHOT"
+version := "1.0.0"
 
 scalaVersion := "2.12.4"
 
