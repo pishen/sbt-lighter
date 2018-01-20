@@ -6,7 +6,7 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
 
 ## Getting started
 
-1. Add sbt-emr-spark in `project/plugins.sbt`
+1. Add sbt-lighter in `project/plugins.sbt`
 
   ```
   addSbtPlugin("net.pishen" % "sbt-lighter" % "1.0.0")
