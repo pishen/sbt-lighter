@@ -1,29 +1,27 @@
-# sbt-emr-spark
+# sbt-lighter
 
-[![Build Status](https://travis-ci.org/pishen/sbt-emr-spark.svg?branch=master)](https://travis-ci.org/pishen/sbt-emr-spark)
+[![Build Status](https://travis-ci.org/pishen/sbt-lighter.svg?branch=master)](https://travis-ci.org/pishen/sbt-lighter)
 
-Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-launch.html) by sbt
+SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-spark-launch.html).
 
 ## Getting started
 
-1. Add sbt-emr-spark in `project/plugins.sbt`
+1. Add sbt-lighter in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-emr-spark" % "0.15.1")
+  addSbtPlugin("net.pishen" % "sbt-lighter" % "1.0.0")
   ```
 
-2. Setup sbt version for your project in `project/build.properties`:
+2. Setup sbt version for your project in `project/build.properties` (requires sbt 1.0):
 
   ```
   sbt.version=1.1.0
   ```
 
-  (Since version 0.13.0, sbt-emr-spark requires sbt 1.0)
-
 3. Prepare your `build.sbt`
 
   ```scala
-  name := "sbt-emr-spark-test"
+  name := "sbt-lighter-demo"
 
   scalaVersion := "2.11.11"
 
@@ -33,14 +31,14 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 
   sparkAwsRegion := "ap-northeast-1"
 
+  //Since we use cluster mode, we need a bucket to store our application's jar.
+  sparkS3JarFolder := "s3://my-emr-bucket/my-emr-folder/"
+
   //(optional) Set the subnet id if you want to run Spark in VPC.
   sparkSubnetId := Some("subnet-xxxxxxxx")
 
-  //(optional) Additional security groups that will be attached to master and slave's ec2.
+  //(optional) Additional security groups that will be attached to Master and Core instances.
   sparkSecurityGroupIds := Seq("sg-xxxxxxxx")
-
-  //Since we use cluster mode, we need a bucket to store your application's jar.
-  sparkS3JarFolder := "s3://my-emr-bucket/my-emr-folder/"
 
   //(optional) Total number of instances, including master node. The default value is 1.
   sparkInstanceCount := 2
@@ -72,21 +70,28 @@ Run your [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseGuide/e
 5. Submit your Spark application
 
   ```
-  > sparkSubmitJob arg0 arg1 ...
+  > sparkSubmit arg0 arg1 ...
   ```
 
-> Note that a cluster with the same name as your project's `name` will be created by default if not exist. And this cluster will terminate itself automatically if there's no further jobs (steps) waiting in the queue. (You can submit multiple jobs (steps) into the queue by executing `sparkSubmitJob` multiple times.)
-> If you want a keep-alive cluster, which doesn't terminate itself automatically, execute `sparkCreateCluster` before `sparkSubmitJob` and terminate it by `sparkTerminateCluster`:
+> Note that a cluster with the same name as your project's `name` will be created by this command. This cluster will terminate itself automatically if there's no further steps waiting in the queue. (You can submit multiple steps into the queue by running `sparkSubmit` multiple times.)
+>
+> If you want a keep-alive cluster, run `sparkCreateCluster` before `sparkSubmit`, and remember to terminate it with `sparkTerminateCluster` when you are done:
 > ```
 > > sparkCreateCluster
-> > sparkSubmitJob arg0 arg1 ...
+> > sparkSubmit arg0 arg1 ...
+> == Wait for your job to finish ==
+> > sparkTerminateCluster
 > ```
+>
+> The id of the created cluster will be stored in a file named `.cluster_id`. This file will be used to find the cluster when running other commands.
 
 ## Other available settings
 
 ```scala
 //Your cluster's name. Default value is copied from your project's `name` setting.
 sparkClusterName := "your-new-cluster-name"
+
+sparkClusterIdFile := file(".cluster_id")
 
 sparkEmrRelease := "emr-5.11.0"
 
@@ -95,33 +100,46 @@ sparkEmrServiceRole := "EMR_DefaultRole"
 //EMR applications that will be installed, default value is Seq("Spark")
 sparkEmrApplications := Seq("Spark", "Zeppelin")
 
-//EC2's instance type. Will be applied to both master and slave nodes.
-sparkInstanceType := "m3.xlarge"
+//EC2 instance type of EMR Master node, default is m3.xlarge
+sparkMasterType := "m3.xlarge"
 
-//Bid price for your spot instance.
-//The default value is None, which means all the instance will be on demand.
-sparkInstanceBidPrice := Some(0.38)
+//EC2 instance type of EMR Core nodes, default is m3.xlarge
+sparkCoreType := "m3.2xlarge"
+
+//Spot instance bid price of Master node, default is None.
+sparkMasterPrice := Some(0.38)
+
+//Spot instance bid price of Core nodes, default is None.
+sparkCorePrice := Some(0.77)
 
 sparkInstanceRole := "EMR_EC2_DefaultRole"
 
-//(optional) EC2 keypair
+//EC2 keypair, default is None.
 sparkInstanceKeyName := Some("your-keypair")
 
-//(optional) EMR logging folder
+//EMR logging folder, default is None.
 sparkS3LogUri := Some("s3://my-emr-bucket/my-emr-log-folder/")
 
-//(optional) Configs of --conf when running spark-submit
+//Configs of --conf when running spark-submit, default is an empty Map.
 sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
 ```
 
 ## Other available commands
 
 ```
+> show sparkClusterId
+
 > sparkListClusters
 
 > sparkTerminateCluster
 
-> sparkSubmitJobWithMain mypackage.Main arg0 arg1 ...
+> sparkSubmitMain mypackage.Main arg0 arg1 ...
+```
+
+If you accidentally deleted your `.cluster_id` file, you can bind it back using:
+
+```
+> sparkBindCluster j-xxxxxxxxxxxxx
 ```
 
 ## Use EmrConfig to configure the applications
@@ -144,7 +162,7 @@ For example, to maximize the memory allocation for each Spark job, one can use t
 Instead of using this JSON config, one can add the following setting in `build.sbt` to achieve the same effect:
 
 ``` scala
-import sbtemrspark.EmrConfig
+import sbtlighter.EmrConfig
 
 sparkEmrConfigs := Seq(
   EmrConfig("spark").withProperties("maximizeResourceAllocation" -> "true")
@@ -154,10 +172,10 @@ sparkEmrConfigs := Seq(
 For people who already have a JSON config, there's a parsing function `EmrConfig.parseJson(jsonString: String)` which can convert the JSON array into `List[EmrConfig]`. And, if your JSON is located on S3, you can also parse the file on S3 directly (note that this will read the file from S3 right after you execute sbt):
 
 ``` scala
-import sbtemrspark.EmrConfig
+import sbtlighter.EmrConfig
 
 sparkEmrConfigs := EmrConfig
-  .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3ClientBuilder.value)
+  .parseJsonFromS3("s3://your-bucket/your-config.json")(sparkS3Client.value)
   .right
   .get
 ```
@@ -222,13 +240,16 @@ sparkS3PutObjectDecorator := { req =>
 If you have multiple environments (e.g. different subnet, different AWS region, ...etc) for your Spark project, you can use SBT's config to provide multiple setting combinations:
 
 ``` scala
-import sbtemrspark.EmrSparkPlugin
-import sbtemrspark.EmrConfig
+import sbtlighter._
 
+//Since we don't use the global scope now, we can disable it.
+LighterPlugin.disable
+
+//And setup your configurations
 lazy val Testing = config("testing")
 lazy val Production = config("production")
 
-inConfig(Testing)(EmrSparkPlugin.baseSettings ++ Seq(
+inConfig(Testing)(LighterPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "ap-northeast-1",
   sparkSubnetId := Some("subnet-xxxxxxxx"),
   sparkSecurityGroupIds := Seq("sg-xxxxxxxx"),
@@ -236,14 +257,14 @@ inConfig(Testing)(EmrSparkPlugin.baseSettings ++ Seq(
   sparkS3JarFolder := "s3://my-testing-bucket/my-emr-folder/"
 ))
 
-inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
+inConfig(Production)(LighterPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "us-west-2",
   sparkSubnetId := Some("subnet-yyyyyyyy"),
   sparkSecurityGroupIds := Seq("sg-yyyyyyyy"),
   sparkInstanceCount := 20,
   sparkS3JarFolder := "s3://my-production-bucket/my-emr-folder/",
   sparkS3LogUri := Some("s3://aws-logs-xxxxxxxxxxxx-us-west-2/elasticmapreduce/")
-  sparkInstanceBidPrice := Some(0.39),
+  sparkCorePrice := Some(0.39),
   sparkEmrConfigs := Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true")))
 ))
 ```
@@ -251,9 +272,9 @@ inConfig(Production)(EmrSparkPlugin.baseSettings ++ Seq(
 Then, in sbt, activate different config by the `<config>:<task/setting>` syntax:
 
 ```
-> testing:sparkSubmitJob
+> testing:sparkSubmit
 
-> production:sparkSubmitJob
+> production:sparkSubmit
 ```
 
 ## Keep SBT monitoring the cluster status until it completes
@@ -284,7 +305,7 @@ And this command will fall into one of the three following behaviors:
 This command would be useful if you want to trigger some notifications. For example, a bash command like this
 
 ```
-$ sbt 'sparkSubmitJob arg0 arg1' sparkMonitor
+$ sbt 'sparkSubmit arg0 arg1' sparkMonitor
 ```
 
 will exit with error if the job fail or running too long (Don't enter the sbt console here, just append the task names after `sbt` like above). You can then put this command into a cron job for scheduled computation, and let cron notify yourself when something go wrong.

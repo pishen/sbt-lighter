@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package sbtemrspark
+package sbtlighter
 
 import scala.collection.JavaConverters._
 import scala.io.Source
 
 import com.amazonaws.services.elasticmapreduce.model.Configuration
-import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import com.amazonaws.services.s3.AmazonS3
 import io.circe.generic.auto._
 import io.circe.parser._
 
@@ -58,14 +58,9 @@ object EmrConfig {
     EmrConfig(classification, None, None)
 
   def parseJson(jsonString: String) = decode[List[EmrConfig]](jsonString)
-  def parseJsonFromS3(s3Url: String)(
-      implicit s3ClientBuilder: AmazonS3ClientBuilder) = {
+  def parseJsonFromS3(s3Url: String)(implicit s3: AmazonS3) = {
     val s3JsonUrl = new S3Url(s3Url)
-    val s3JsonInputStream = s3ClientBuilder
-      .build()
-      .getObject(s3JsonUrl.bucket, s3JsonUrl.key)
-      .getObjectContent
-    val jsonString = Source.fromInputStream(s3JsonInputStream).mkString
+    val jsonString = s3.getObjectAsString(s3JsonUrl.bucket, s3JsonUrl.key)
     parseJson(jsonString)
   }
 }

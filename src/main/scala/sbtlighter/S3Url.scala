@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package sbtemrspark
+package sbtlighter
 
 class S3Url(url: String) {
   require(
@@ -34,4 +34,8 @@ class S3Url(url: String) {
   }
 
   override def toString = s"s3://$bucket/$key"
+}
+
+object S3Url {
+  def apply(url: String) = new S3Url(url)
 }
