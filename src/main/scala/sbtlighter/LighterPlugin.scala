@@ -49,6 +49,8 @@ object LighterPlugin extends AutoPlugin {
       settingKey[Seq[EmrConfig]]("EMR Configurations")
     val sparkEmrApplications =
       settingKey[Seq[String]]("EMR Applications")
+    val sparkVisibleToAllUsers =
+      settingKey[Boolean]("EMR Cluster Visiblity")
     val sparkSubnetId =
       settingKey[Option[String]]("Subnet Id")
     val sparkSecurityGroupIds =
@@ -141,6 +143,7 @@ object LighterPlugin extends AutoPlugin {
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := Seq.empty,
     sparkEmrApplications := Seq("Spark"),
+    sparkVisibleToAllUsers := true,
     sparkSubnetId := None,
     sparkSecurityGroupIds := Seq.empty,
     sparkInstanceCount := 1,
@@ -239,6 +242,7 @@ object LighterPlugin extends AutoPlugin {
         .withReleaseLabel(sparkEmrRelease.value)
         .withServiceRole(sparkEmrServiceRole.value)
         .withJobFlowRole(sparkInstanceRole.value)
+        .withVisibleToAllUsers(sparkVisibleToAllUsers.value)
         .withInstances(sparkJobFlowInstancesConfig.value)
     },
     sparkClusterId := {
