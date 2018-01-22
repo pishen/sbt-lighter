@@ -100,6 +100,8 @@ sparkEmrServiceRole := "EMR_DefaultRole"
 //EMR applications that will be installed, default value is Seq("Spark")
 sparkEmrApplications := Seq("Spark", "Zeppelin")
 
+sparkVisibleToAllUsers := true
+
 //EC2 instance type of EMR Master node, default is m3.xlarge
 sparkMasterType := "m3.xlarge"
 

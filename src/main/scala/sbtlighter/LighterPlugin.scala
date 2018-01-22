@@ -95,10 +95,6 @@ object LighterPlugin extends AutoPlugin {
       settingKey[JobFlowInstancesConfig]("Default JobFlowInstancesConfig")
     val sparkRunJobFlowRequest =
       settingKey[RunJobFlowRequest]("Default RunJobFlowRequest")
-    val sparkFallbackMasterType =
-      settingKey[String](
-        "Instance type of EMR Master node when sparkInstanceCount is > 1"
-      )
 
     //commands
     val sparkClusterId =
