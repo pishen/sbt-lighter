@@ -450,7 +450,7 @@ object LighterPlugin extends AutoPlugin {
 
     val step = new StepConfig()
       .withActionOnFailure(ActionOnFailure.CONTINUE)
-      .withName("Spark Step")
+      .withName(mainClass.split(".").lastOption.getOrElse("Spark Step"))
       .withHadoopJarStep(
         new HadoopJarStepConfig()
           .withJar("command-runner.jar")
