@@ -2,11 +2,11 @@ name := "sbt-lighter"
 
 version := "1.0.0"
 
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.6"
 
 sbtPlugin := true
 
-val awsVersion = "1.11.221"
+val awsVersion = "1.11.320"
 val circeVersion = "0.8.0"
 
 libraryDependencies ++= Seq(
