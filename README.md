@@ -9,13 +9,13 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
 1. Add sbt-lighter in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-lighter" % "1.0.0")
+  addSbtPlugin("net.pishen" % "sbt-lighter" % "1.1.0")
   ```
 
 2. Setup sbt version for your project in `project/build.properties` (requires sbt 1.0):
 
   ```
-  sbt.version=1.1.0
+  sbt.version=1.1.6
   ```
 
 3. Prepare your `build.sbt`
@@ -26,7 +26,7 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
   scalaVersion := "2.11.11"
 
   libraryDependencies ++= Seq(
-    "org.apache.spark" %% "spark-core" % "2.2.0" % "provided"
+    "org.apache.spark" %% "spark-core" % "2.3.0" % "provided"
   )
 
   sparkAwsRegion := "ap-northeast-1"
@@ -73,7 +73,7 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
   > sparkSubmit arg0 arg1 ...
   ```
 
-> Note that a cluster with the same name as your project's `name` will be created by this command. This cluster will terminate itself automatically if there's no further steps waiting in the queue. (You can submit multiple steps into the queue by running `sparkSubmit` multiple times.)
+> Note that a cluster with the same name as your project's `name` will be created by this command. This cluster will terminate itself automatically if there's no further steps (beyond the one you just submitted) waiting in the queue. (You can submit multiple steps into the queue by running `sparkSubmit` multiple times.)
 >
 > If you want a keep-alive cluster, run `sparkCreateCluster` before `sparkSubmit`, and remember to terminate it with `sparkTerminateCluster` when you are done:
 > ```
@@ -93,7 +93,7 @@ sparkClusterName := "your-new-cluster-name"
 
 sparkClusterIdFile := file(".cluster_id")
 
-sparkEmrRelease := "emr-5.11.0"
+sparkEmrRelease := "emr-5.14.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
 
@@ -102,17 +102,24 @@ sparkEmrApplications := Seq("Spark", "Zeppelin")
 
 sparkVisibleToAllUsers := true
 
-//EC2 instance type of EMR Master node, default is m3.xlarge
-sparkMasterType := "m3.xlarge"
+//EC2 instance type of EMR Master node, default is m4.large
+//Note that this is *not* the master node of Spark
+sparkMasterType := "m4.large"
 
-//EC2 instance type of EMR Core nodes, default is m3.xlarge
-sparkCoreType := "m3.2xlarge"
+//EC2 instance type of EMR Core nodes, default is m4.large
+sparkCoreType := "m4.large"
+
+//EBS (disk) size of EMR Master node, default is 32GB
+sparkMasterEbsSize := Some(32)
+
+//EBS (disk) size of EMR Core nodes, default is 32GB
+sparkCoreEbsSize := Some(32)
 
 //Spot instance bid price of Master node, default is None.
-sparkMasterPrice := Some(0.38)
+sparkMasterPrice := Some(0.1)
 
 //Spot instance bid price of Core nodes, default is None.
-sparkCorePrice := Some(0.77)
+sparkCorePrice := Some(0.1)
 
 sparkInstanceRole := "EMR_EC2_DefaultRole"
 
