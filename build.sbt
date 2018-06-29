@@ -1,12 +1,12 @@
 name := "sbt-lighter"
 
-version := "1.0.0"
+version := "1.1.0-SNAPSHOT"
 
 scalaVersion := "2.12.4"
 
 sbtPlugin := true
 
-val awsVersion = "1.11.221"
+val awsVersion = "1.11.356"
 val circeVersion = "0.8.0"
 
 libraryDependencies ++= Seq(
@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser" % circeVersion
 )
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.6")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.7")
 
 publishMavenStyle := false
 organization := "net.pishen"
