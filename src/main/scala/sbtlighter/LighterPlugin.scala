@@ -67,10 +67,14 @@ object LighterPlugin extends AutoPlugin {
       settingKey[String]("Instance Type of EMR Master")
     val sparkMasterPrice =
       settingKey[Option[Double]]("Spot Price of EMR Master")
+    val sparkMasterEbsSize =
+      settingKey[Option[Int]]("EBS Size (GB) of EMR Master")
     val sparkCoreType =
       settingKey[String]("Instance Type of EMR Core")
     val sparkCorePrice =
       settingKey[Option[Double]]("Spot Price of EMR Core")
+    val sparkCoreEbsSize =
+      settingKey[Option[Int]]("EBS Size (GB) of EMR Core")
     val sparkS3JarFolder =
       settingKey[String]("S3 folder for the built jar")
     val sparkS3LogUri =
@@ -135,7 +139,7 @@ object LighterPlugin extends AutoPlugin {
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
     sparkClusterIdFile := file(".cluster_id"),
-    sparkEmrRelease := "emr-5.11.0",
+    sparkEmrRelease := "emr-5.14.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := Seq.empty,
     sparkEmrApplications := Seq("Spark"),
@@ -145,10 +149,12 @@ object LighterPlugin extends AutoPlugin {
     sparkInstanceCount := 1,
     sparkInstanceRole := "EMR_EC2_DefaultRole",
     sparkInstanceKeyName := None,
-    sparkMasterType := "m3.xlarge",
+    sparkMasterType := "m4.large",
     sparkMasterPrice := None,
-    sparkCoreType := "m3.xlarge",
+    sparkMasterEbsSize := Some(32),
+    sparkCoreType := "m4.large",
     sparkCorePrice := None,
+    sparkCoreEbsSize := Some(32),
     sparkS3LogUri := None,
     sparkTimeoutDuration := 90.minutes,
     sparkSubmitConfs := Map.empty,
@@ -184,6 +190,19 @@ object LighterPlugin extends AutoPlugin {
         }
         .get
         .withInstanceGroups {
+          def getEbsConf(ebsSize: Int) = {
+            new EbsConfiguration()
+              .withEbsBlockDeviceConfigs(
+                new EbsBlockDeviceConfig()
+                  .withVolumesPerInstance(1)
+                  .withVolumeSpecification(
+                    new VolumeSpecification()
+                      .withVolumeType("gp2")
+                      .withSizeInGB(ebsSize)
+                  )
+              )
+          }
+
           val masterConfig = Some(new InstanceGroupConfig())
             .map { c =>
               sparkMasterPrice.value
@@ -191,6 +210,13 @@ object LighterPlugin extends AutoPlugin {
                   c.withMarket(MarketType.SPOT).withBidPrice(price.toString)
                 }
                 .getOrElse(c.withMarket(MarketType.ON_DEMAND))
+            }
+            .map { c =>
+              sparkMasterEbsSize.value
+                .map { ebsSize =>
+                  c.withEbsConfiguration(getEbsConf(ebsSize))
+                }
+                .getOrElse(c)
             }
             .get
             .withInstanceCount(1)
@@ -205,6 +231,13 @@ object LighterPlugin extends AutoPlugin {
                   c.withMarket(MarketType.SPOT).withBidPrice(price.toString)
                 }
                 .getOrElse(c.withMarket(MarketType.ON_DEMAND))
+            }
+            .map { c =>
+              sparkCoreEbsSize.value
+                .map { ebsSize =>
+                  c.withEbsConfiguration(getEbsConf(ebsSize))
+                }
+                .getOrElse(c)
             }
             .get
             .withInstanceCount(coreCount)
