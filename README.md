@@ -35,10 +35,10 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
   sparkS3JarFolder := "s3://my-emr-bucket/my-emr-folder/"
 
   //(optional) Set the subnet id if you want to run Spark in VPC.
-  sparkSubnetId := Some("subnet-xxxxxxxx")
+  sparkSubnetId := Some("subnet-********")
 
   //(optional) Additional security groups that will be attached to Master and Core instances.
-  sparkSecurityGroupIds := Seq("sg-xxxxxxxx")
+  sparkSecurityGroupIds := Seq("sg-********")
 
   //(optional) Total number of instances, including master node. The default value is 1.
   sparkInstanceCount := 2
@@ -148,7 +148,7 @@ sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instan
 If you accidentally deleted your `.cluster_id` file, you can bind it back using:
 
 ```
-> sparkBindCluster j-xxxxxxxxxxxxx
+> sparkBindCluster j-*************
 ```
 
 ## Use EmrConfig to configure the applications
@@ -197,8 +197,8 @@ There are two settings called `sparkJobFlowInstancesConfig` and `sparkRunJobFlow
 
 ``` scala
 sparkJobFlowInstancesConfig := sparkJobFlowInstancesConfig.value
-  .withAdditionalMasterSecurityGroups("sg-xxxxxxxx")
-  .withAdditionalSlaveSecurityGroups("sg-yyyyyyyy")
+  .withAdditionalMasterSecurityGroups("sg-aaaaaaaa")
+  .withAdditionalSlaveSecurityGroups("sg-bbbbbbbb")
 ```
 
 #### To set the EMR auto-scaling role:
@@ -260,19 +260,19 @@ lazy val Production = config("production")
 
 inConfig(Testing)(LighterPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "ap-northeast-1",
-  sparkSubnetId := Some("subnet-xxxxxxxx"),
-  sparkSecurityGroupIds := Seq("sg-xxxxxxxx"),
+  sparkSubnetId := Some("subnet-aaaaaaaa"),
+  sparkSecurityGroupIds := Seq("sg-aaaaaaaa"),
   sparkInstanceCount := 1,
   sparkS3JarFolder := "s3://my-testing-bucket/my-emr-folder/"
 ))
 
 inConfig(Production)(LighterPlugin.baseSettings ++ Seq(
   sparkAwsRegion := "us-west-2",
-  sparkSubnetId := Some("subnet-yyyyyyyy"),
-  sparkSecurityGroupIds := Seq("sg-yyyyyyyy"),
+  sparkSubnetId := Some("subnet-bbbbbbbb"),
+  sparkSecurityGroupIds := Seq("sg-bbbbbbbb"),
   sparkInstanceCount := 20,
   sparkS3JarFolder := "s3://my-production-bucket/my-emr-folder/",
-  sparkS3LogUri := Some("s3://aws-logs-xxxxxxxxxxxx-us-west-2/elasticmapreduce/")
+  sparkS3LogUri := Some("s3://aws-logs-************-us-west-2/elasticmapreduce/")
   sparkCorePrice := Some(0.39),
   sparkEmrConfigs := Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true")))
 ))
