@@ -275,6 +275,7 @@ inConfig(Production)(LighterPlugin.baseSettings ++ Seq(
   sparkS3LogUri := Some("s3://aws-logs-************-us-west-2/elasticmapreduce/")
   sparkCorePrice := Some(0.39),
   sparkEmrConfigs := Seq(EmrConfig("spark", Map("maximizeResourceAllocation" -> "true")))
+  sparkEmrBootstrap := Seq(BootstrapAction("my-bootstrap", "s3://my-production-bucket/bootstrap.sh", "--full"))
 ))
 ```
 

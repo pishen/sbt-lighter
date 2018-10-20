@@ -47,6 +47,8 @@ object LighterPlugin extends AutoPlugin {
       settingKey[String]("EMR Service Role")
     val sparkEmrConfigs =
       settingKey[Seq[EmrConfig]]("EMR Configurations")
+    val sparkEmrBootstrap =
+      settingKey[Seq[BootstrapAction]]("EMR Cluster Bootstrap Scripts")
     val sparkEmrApplications =
       settingKey[Seq[String]]("EMR Applications")
     val sparkVisibleToAllUsers =
@@ -142,6 +144,7 @@ object LighterPlugin extends AutoPlugin {
     sparkEmrRelease := "emr-5.14.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := Seq.empty,
+    sparkEmrBootstrap := Seq.empty,
     sparkEmrApplications := Seq("Spark"),
     sparkVisibleToAllUsers := true,
     sparkSubnetId := None,
@@ -258,6 +261,12 @@ object LighterPlugin extends AutoPlugin {
           val emrConfigs = sparkEmrConfigs.value
           if (emrConfigs.nonEmpty) {
             r.withConfigurations(emrConfigs.map(_.toAwsEmrConfig()): _*)
+          } else r
+        }
+        .map { r =>
+          val actions = sparkEmrBootstrap.value
+          if (actions.nonEmpty) {
+            r.withBootstrapActions(actions.map(_.toAwsBootstrapActionConfig()).asJava)
           } else r
         }
         .map { r =>
