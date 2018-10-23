@@ -9,7 +9,7 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
 1. Add sbt-lighter in `project/plugins.sbt`
 
   ```
-  addSbtPlugin("net.pishen" % "sbt-lighter" % "1.1.0")
+  addSbtPlugin("net.pishen" % "sbt-lighter" % "1.2.0")
   ```
 
 2. Setup sbt version for your project in `project/build.properties` (requires sbt 1.0):
@@ -23,10 +23,10 @@ SBT plugin for [Spark on AWS EMR](http://docs.aws.amazon.com/emr/latest/ReleaseG
   ```scala
   name := "sbt-lighter-demo"
 
-  scalaVersion := "2.11.11"
+  scalaVersion := "2.11.12"
 
   libraryDependencies ++= Seq(
-    "org.apache.spark" %% "spark-core" % "2.3.0" % "provided"
+    "org.apache.spark" %% "spark-core" % "2.3.1" % "provided"
   )
 
   sparkAwsRegion := "ap-northeast-1"
@@ -93,7 +93,7 @@ sparkClusterName := "your-new-cluster-name"
 
 sparkClusterIdFile := file(".cluster_id")
 
-sparkEmrRelease := "emr-5.14.0"
+sparkEmrRelease := "emr-5.17.0"
 
 sparkEmrServiceRole := "EMR_DefaultRole"
 
