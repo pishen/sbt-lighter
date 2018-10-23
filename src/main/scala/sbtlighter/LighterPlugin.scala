@@ -141,7 +141,7 @@ object LighterPlugin extends AutoPlugin {
   lazy val baseSettings = Seq(
     sparkClusterName := name.value,
     sparkClusterIdFile := file(".cluster_id"),
-    sparkEmrRelease := "emr-5.14.0",
+    sparkEmrRelease := "emr-5.17.0",
     sparkEmrServiceRole := "EMR_DefaultRole",
     sparkEmrConfigs := Seq.empty,
     sparkEmrBootstrap := Seq.empty,
