@@ -131,6 +131,9 @@ sparkS3LogUri := Some("s3://my-emr-bucket/my-emr-log-folder/")
 
 //Configs of --conf when running spark-submit, default is an empty Map.
 sparkSubmitConfs := Map("spark.executor.memory" -> "10G", "spark.executor.instances" -> "2")
+
+//List of EMR bootstrap scripts and their parameters, if any, default is Seq.empty.
+sparkEmrBootstrap := Seq(BootstrapAction("my-bootstrap", "s3://my-production-bucket/bootstrap.sh", "--full"))
 ```
 
 ## Other available commands
